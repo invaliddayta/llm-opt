@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
+  <title id="title">llm-opt</title>
+  <desc id="desc">llm-opt: faster speculative decoding for Qwen3.8-27B on one RTX 3090. Time per verify step: upstream llama.cpp 54 ms, llm-opt 33 ms, about 1.6 times faster.</desc>
+  <rect width="1200" height="390" fill="#090c12"/>
+  <rect x="24.5" y="24.5" width="1151" height="341" fill="#101318" stroke="#45484e"/>
+  <path d="M25 59.5h1150M25 326.5h1150" stroke="#45484e"/>
+  <rect x="25" y="25" width="1150" height="34" fill="#1d1f23"/>
+  <path d="m40 36 6 6-6 6m12 0h7" fill="none" stroke="#76b900" stroke-width="2"/>
+  <g font-family="'DejaVu Sans Mono',Consolas,monospace">
+    <text x="72" y="47" fill="#c9cbd0" font-size="13">llm-opt</text>
+    <text x="1146" y="47" fill="#96999f" font-size="12" text-anchor="end">LLAMA.CPP / CUDA / SM_86</text>
+    <text x="70" y="165" fill="#dededb" font-size="76" font-weight="700" letter-spacing="-5">llm</text>
+    <text x="194" y="165" fill="#3b5a00" font-size="76" font-weight="700" font-style="italic" letter-spacing="-5">-opt</text>
+    <text x="191" y="162" fill="#76b900" font-size="76" font-weight="700" font-style="italic" letter-spacing="-5">-opt</text>
+    <text x="73" y="210" fill="#b3b7bf" font-size="20">27B speculative decode, one RTX 3090.</text>
+    <text x="73" y="240" fill="#80848c" font-size="15">Qwen3.8-27B IQ4_XS + DFlash2 draft, 98K context</text>
+
+    <text x="640" y="127" fill="#96999f" font-size="12">TIME PER VERIFY STEP (8 TOKENS)</text>
+    <text x="640" y="165" fill="#c9cbd0" font-size="14">upstream</text>
+    <rect x="740" y="152" width="340" height="18" fill="#3a3d43"/>
+    <text x="1090" y="166" fill="#c9cbd0" font-size="14">54 ms</text>
+    <text x="640" y="205" fill="#c9cbd0" font-size="14">llm-opt</text>
+    <rect x="740" y="192" width="208" height="18" fill="#76b900"/>
+    <text x="958" y="206" fill="#76b900" font-size="14" font-weight="700">33 ms</text>
+    <text x="640" y="251" fill="#dededb" font-size="30" font-weight="700">1.6x</text>
+    <text x="726" y="251" fill="#96999f" font-size="15">faster per step, same output hashes</text>
+
+    <text x="42" y="350" fill="#96999f" font-size="12">KERNELS, BENCHMARKS, MEASUREMENTS.</text>
+    <text x="1157" y="350" fill="#96999f" font-size="12" text-anchor="end">144 TOK/S ON LONG TASKS</text>
+  </g>
+</svg>

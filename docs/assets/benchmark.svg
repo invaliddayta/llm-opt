@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Benchmark: upstream llama.cpp vs llama.cpp-opt</title>
+  <desc id="desc">Milliseconds per verify step, lower is better. Explanation: upstream 53.3, llama.cpp-opt 32.7. Python with tools: upstream 55.1, llama.cpp-opt 33.4. Story: upstream 53.8, llama.cpp-opt 33.3. Decode speed: 108.2 vs 150.1, 96.2 vs 163.5, 72.8 vs 129.8 tokens per second.</desc>
+  <rect width="1200" height="420" fill="#090c12"/>
+  <rect x="24.5" y="24.5" width="1151" height="371" fill="#101318" stroke="#45484e"/>
+  <path d="M25 59.5h1150M25 356.5h1150" stroke="#45484e"/>
+  <rect x="25" y="25" width="1150" height="34" fill="#1d1f23"/>
+  <path d="m40 36 6 6-6 6m12 0h7" fill="none" stroke="#76b900" stroke-width="2"/>
+  <g font-family="'DejaVu Sans Mono',Consolas,monospace">
+    <text x="72" y="47" fill="#c9cbd0" font-size="13">bench/r20_replay.py</text>
+    <text x="1146" y="47" fill="#96999f" font-size="12" text-anchor="end">RTX 3090 / 98K CONTEXT / SAME SESSION</text>
+
+    <text x="60" y="96" fill="#96999f" font-size="12">MS PER VERIFY STEP (LOWER IS BETTER)</text>
+    <rect x="760" y="85" width="14" height="12" fill="#3a3d43"/><text x="782" y="96" fill="#c9cbd0" font-size="13">upstream llama.cpp</text>
+    <rect x="960" y="85" width="14" height="12" fill="#76b900"/><text x="982" y="96" fill="#c9cbd0" font-size="13">llama.cpp-opt</text>
+
+    <!-- scale: 10 px per ms from x=260 -->
+    <g font-size="14">
+      <text x="60" y="140" fill="#dededb" font-weight="700">explanation</text>
+      <text x="60" y="160" fill="#80848c" font-size="12">prose, T=0.4</text>
+      <rect x="260" y="126" width="533" height="16" fill="#3a3d43"/>
+      <text x="801" y="139" fill="#c9cbd0">53.3 ms</text><text x="1146" y="139" fill="#80848c" text-anchor="end">108.2 tok/s</text>
+      <rect x="260" y="148" width="327" height="16" fill="#76b900"/>
+      <text x="595" y="161" fill="#76b900" font-weight="700">32.7 ms</text><text x="1146" y="161" fill="#76b900" text-anchor="end" font-weight="700">150.1 tok/s</text>
+
+      <text x="60" y="215" fill="#dededb" font-weight="700">python100</text>
+      <text x="60" y="235" fill="#80848c" font-size="12">code, T=0, 11 tools</text>
+      <rect x="260" y="201" width="551" height="16" fill="#3a3d43"/>
+      <text x="819" y="214" fill="#c9cbd0">55.1 ms</text><text x="1146" y="214" fill="#80848c" text-anchor="end">96.2 tok/s</text>
+      <rect x="260" y="223" width="334" height="16" fill="#76b900"/>
+      <text x="602" y="236" fill="#76b900" font-weight="700">33.4 ms</text><text x="1146" y="236" fill="#76b900" text-anchor="end" font-weight="700">163.5 tok/s</text>
+
+      <text x="60" y="290" fill="#dededb" font-weight="700">story</text>
+      <text x="60" y="310" fill="#80848c" font-size="12">prose, T=0.4</text>
+      <rect x="260" y="276" width="538" height="16" fill="#3a3d43"/>
+      <text x="806" y="289" fill="#c9cbd0">53.8 ms</text><text x="1146" y="289" fill="#80848c" text-anchor="end">72.8 tok/s</text>
+      <rect x="260" y="298" width="333" height="16" fill="#76b900"/>
+      <text x="601" y="311" fill="#76b900" font-weight="700">33.3 ms</text><text x="1146" y="311" fill="#76b900" text-anchor="end" font-weight="700">129.8 tok/s</text>
+    </g>
+
+    <text x="42" y="381" fill="#96999f" font-size="12">QWEN3.8-27B IQ4_XS + STOCK DFLASH2 Q4_K_M, Q4_0 KV, 8-TOKEN VERIFY.</text>
+    <text x="1157" y="381" fill="#96999f" font-size="12" text-anchor="end">~1.6X FASTER PER STEP</text>
+  </g>
+</svg>

@@ -1,0 +1,13 @@
+llama.cpp/
+models/
+data/
+runs/
+venv/
+.venv/
+*.gguf
+*.safetensors
+llama-deploy/
+driver-libs/
+SpecForge/
+__pycache__/
+*.pyc

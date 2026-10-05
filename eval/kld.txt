@@ -1,0 +1,1010 @@
+# Build llama.cpp locally
+
+The main product of this project is the `llama` library. Its C-style interface can be found in [include/llama.h](../include/llama.h).
+
+The project also includes many example programs and tools using the `llama` library. The examples range from simple, minimal code snippets to sophisticated sub-projects such as an OpenAI-compatible HTTP server.
+
+**To get the Code:**
+
+```bash
+git clone https://github.com/ggml-org/llama.cpp
+cd llama.cpp
+```
+
+The following sections describe how to build with different backends and options.
+
+* [CPU Build](#cpu-build)
+* [BLAS Build](#blas-build)
+* [Metal Build](#metal-build)
+* [SYCL](#sycl)
+* [CUDA](#cuda)
+* [MUSA](#musa)
+* [HIP](#hip)
+* [Vulkan](#vulkan)
+* [CANN](#cann)
+* [ZenDNN](#zendnn)
+* [Arm® KleidiAI™](#arm-kleidiai)
+* [OpenCL](#opencl)
+* [Android](#android-1)
+* [OpenVINO](#openvino)
+* [Hexagon](#hexagon)
+* [Notes about GPU-accelerated backends](#notes-about-gpu-accelerated-backends)
+
+## CPU Build
+
+Build llama.cpp using `CMake`:
+
+```bash
+cmake -B build
+cmake --build build --config Release
+```
+
+**Notes**:
+
+- For faster compilation, add the `-j` argument to run multiple jobs in parallel, or use a generator that does this automatically such as Ninja. For example, `cmake --build build --config Release -j 8` will run 8 jobs in parallel.
+- For faster repeated compilation, install [ccache](https://ccache.dev/)
+- For debug builds, there are two cases:
+
+    1. Single-config generators (e.g. default = `Unix Makefiles`; note that they just ignore the `--config` flag):
+
+       ```bash
+       cmake -B build -DCMAKE_BUILD_TYPE=Debug
+       cmake --build build
+       ```
+
+    2. Multi-config generators (`-G` param set to Visual Studio, XCode...):
+
+       ```bash
+       cmake -B build -G "Xcode"
+       cmake --build build --config Debug
+       ```
+
+    For more details and a list of supported generators, see the [CMake documentation](https://cmake.org/cmake/help/latest/manual/cmake-generators.7.html).
+- For static builds, add `-DBUILD_SHARED_LIBS=OFF`:
+  ```
+  cmake -B build -DBUILD_SHARED_LIBS=OFF
+  cmake --build build --config Release
+  ```
+
+- Building for Windows (x86, x64 and arm64) with MSVC or clang as compilers:
+    - Install Visual Studio 2022, e.g. via the [Community Edition](https://visualstudio.microsoft.com/vs/community/). In the installer, select at least the following options (this also automatically installs the required additional tools like CMake,...):
+    - Tab Workload: Desktop-development with C++
+    - Tab Components (select quickly via search): C++-_CMake_ Tools for Windows, _Git_ for Windows, C++-_Clang_ Compiler for Windows, MS-Build Support for LLVM-Toolset (clang)
+    - Please remember to always use a Developer Command Prompt / PowerShell for VS2022 for git, build, test
+    - For Windows on ARM (arm64, WoA), build with:
+      ```bash
+      cmake --preset arm64-windows-llvm-release -D GGML_OPENMP_FETCH=ON
+      cmake --build build-arm64-windows-llvm-release
+      ```
+      - Use `ARM64 Native Tools Command Prompt for VS 2022` if you are building on an ARM64 machine.
+      - `GGML_OPENMP_FETCH` downloads the official LLVM OpenMP runtime and requires Clang, 7-Zip and network access during configuration. CMake selects the runtime from the target architecture, so this also works when cross-compiling for WoA from x64. The extracted header, import library, DLL and OpenMP license are placed under `build/_deps`. The build copies `libomp.dll` and `LICENSE-LLVM-OpenMP` to the runtime output directory and installs them together. Omit the option to use CMake's normal OpenMP detection, or pass `-D GGML_OPENMP=OFF` to disable OpenMP.
+    - For building with ninja generator and clang compiler as default:
+      - Set path:
+        ```
+        set LIB=C:\Program Files (x86)\Windows Kits\10\Lib\10.0.22621.0\um\x64;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.41.34120\lib\x64\uwp;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.22621.0\ucrt\x64
+        ```
+      - Run:
+        ```bash
+        cmake --preset x64-windows-llvm-release
+        cmake --build build-x64-windows-llvm-release
+        ```
+- If you want HTTPS/TLS features, you may install OpenSSL development libraries. If not installed, the project will build and run without SSL support.
+  - **Debian / Ubuntu:** `sudo apt-get install libssl-dev`
+  - **Fedora / RHEL / Rocky / Alma:** `sudo dnf install openssl-devel`
+  - **Arch / Manjaro:** `sudo pacman -S openssl`
+
+## BLAS Build
+
+Building the program with BLAS support may lead to some performance improvements in prompt processing using batch sizes higher than 32 (the default is 512). Using BLAS doesn't affect the generation performance. There are currently several different BLAS implementations available for build and use:
+
+### Accelerate Framework
+
+This is only available on Mac PCs and it's enabled by default. You can just build using the normal instructions.
+
+### OpenBLAS
+
+This provides BLAS acceleration using only the CPU. Make sure to have OpenBLAS installed on your machine.
+
+- Using `CMake` on Linux:
+
+    ```bash
+    cmake -B build -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS
+    cmake --build build --config Release
+    ```
+
+### BLIS
+
+Check [BLIS.md](./backend/BLIS.md) for more information.
+
+### Intel oneMKL
+
+Building through oneAPI compilers will make avx_vnni instruction set available for intel processors that do not support avx512 and avx512_vnni. Please note that this build config **does not support Intel GPU**. For Intel GPU support, please refer to [llama.cpp for SYCL](./backend/SYCL.md).
+
+- Using manual oneAPI installation:
+  By default, `GGML_BLAS_VENDOR` is set to `Generic`, so if you already sourced intel environment script and assign `-DGGML_BLAS=ON` in cmake, the mkl version of Blas will automatically been selected. Otherwise please install oneAPI and follow the below steps:
+    ```bash
+    source /opt/intel/oneapi/setvars.sh # You can skip this step if  in oneapi-basekit docker image, only required for manual installation
+    cmake -B build -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=Intel10_64lp -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DGGML_NATIVE=ON
+    cmake --build build --config Release
+    ```
+
+- Using oneAPI docker image:
+  If you do not want to source the environment vars and install oneAPI manually, you can also build the code using intel docker container: [oneAPI-basekit](https://hub.docker.com/r/intel/oneapi-basekit). Then, you can use the commands given above.
+
+Check [Optimizing and Running LLaMA2 on Intel® CPU](https://builders.intel.com/solutionslibrary/optimizing-and-running-llama2-on-intel-cpu) for more information.
+
+### Other BLAS libraries
+
+Any other BLAS library can be used by setting the `GGML_BLAS_VENDOR` option. See the [CMake documentation](https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors) for a list of supported vendors.
+
+## Metal Build
+
+On MacOS, Metal is enabled by default. Using Metal makes the computation run on the GPU.
+To disable the Metal build at compile time use the `-DGGML_METAL=OFF` cmake option.
+
+When built with Metal support, you can explicitly disable GPU inference with the `--n-gpu-layers 0` command-line argument.
+
+## SYCL
+
+SYCL is a higher-level programming model to improve programming productivity on various hardware accelerators.
+
+llama.cpp based on SYCL is used to **support Intel GPU** (Data Center Max series, Flex series, Arc series, Built-in GPU and iGPU).
+
+For detailed info, please refer to [llama.cpp for SYCL](./backend/SYCL.md).
+
+## CUDA
+
+This provides GPU acceleration using an NVIDIA GPU. Make sure to have the [CUDA toolkit](https://developer.nvidia.com/cuda-toolkit) installed.
+
+#### Download directly from NVIDIA
+You may find the official downloads here: [NVIDIA developer site](https://developer.nvidia.com/cuda-downloads).
+
+
+#### Compile and run inside a Fedora Toolbox Container
+We also have a [guide](./backend/CUDA-FEDORA.md) for setting up CUDA toolkit in a Fedora [toolbox container](https://containertoolbx.org/).
+
+**Recommended for:**
+- ***Necessary*** for users of [Atomic Desktops for Fedora](https://fedoraproject.org/atomic-desktops/); such as: [Silverblue](https://fedoraproject.org/atomic-desktops/silverblue/) and [Kinoite](https://fedoraproject.org/atomic-desktops/kinoite/).
+  - (there are no supported CUDA packages for these systems)
+- ***Necessary*** for users that have a host that is not a: [Supported Nvidia CUDA Release Platform](https://developer.nvidia.com/cuda-downloads).
+  - (for example, you may have [Fedora 42 Beta](https://fedoramagazine.org/announcing-fedora-linux-42-beta/) as your host operating system)
+- ***Convenient*** For those running [Fedora Workstation](https://fedoraproject.org/workstation/) or [Fedora KDE Plasma Desktop](https://fedoraproject.org/spins/kde), and want to keep their host system clean.
+- *Optionally* toolbox packages are available: [Arch Linux](https://archlinux.org/), [Red Hat Enterprise Linux >= 8.5](https://www.redhat.com/en/technologies/linux-platforms/enterprise-linux), or [Ubuntu](https://ubuntu.com/download)
+
+
+### Compilation
+
+Make sure to read the notes about the CPU build for general instructions for e.g. speeding up the compilation.
+
+```bash
+cmake -B build -DGGML_CUDA=ON
+cmake --build build --config Release
+```
+
+Note that this also builds the CPU backend by default. On Windows on ARM, MSVC's
+support for the ARM NEON intrinsics used by the CPU backend may be incomplete, so
+a CUDA build produced entirely with MSVC might have a slower CPU backend. If CPU
+performance matters, try following the split build used in our release workflow
+([.github/workflows/release.yml](../.github/workflows/release.yml)): the CPU backend
+is built with clang (`cmake/arm64-windows-llvm.cmake`) and the CUDA backend with MSVC
+(`cmake/arm64-windows-msvc-cuda.cmake`), and the artifacts are merged afterwards.
+
+### Non-Native Builds
+
+By default llama.cpp will be built for the hardware that is connected to the system at that time.
+For a build covering all CUDA GPUs, disable `GGML_NATIVE`:
+
+```bash
+cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF
+```
+
+The resulting binary should run on all CUDA GPUs with optimal performance, though some just-in-time compilation may be required.
+
+### Override Compute Capability Specifications
+
+If `nvcc` cannot detect your gpu, you may get compile warnings such as:
+ ```text
+nvcc warning : Cannot find valid GPU for '-arch=native', default arch is used
+```
+
+One option is to do a non-native build as described above.
+However, this will result in a large binary that takes a long time to compile.
+Alternatively it is also possible to explicitly specify CUDA architectures.
+This may also make sense for a non-native build, for that one should look at the logic in `ggml/src/ggml-cuda/CMakeLists.txt` as a starting point.
+
+To override the default CUDA architectures:
+
+#### 1. Take note of the `Compute Capability` of your NVIDIA devices: ["CUDA: Your GPU Compute > Capability"](https://developer.nvidia.com/cuda-gpus).
+
+```text
+GeForce RTX 4090      8.9
+GeForce RTX 3080 Ti   8.6
+GeForce RTX 3070      8.6
+```
+
+#### 2. Manually list each varying `Compute Capability` in the `CMAKE_CUDA_ARCHITECTURES` list.
+
+```bash
+cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="86;89"
+```
+
+### Overriding the CUDA Version
+
+If you have multiple CUDA installations on your system and want to compile llama.cpp for a specific one, e.g. for CUDA 11.7 installed under `/opt/cuda-11.7`:
+
+```bash
+cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_COMPILER=/opt/cuda-11.7/bin/nvcc -DCMAKE_INSTALL_RPATH="/opt/cuda-11.7/lib64;\$ORIGIN" -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON
+```
+
+#### Fixing Compatibility Issues with Old CUDA and New glibc
+
+If you try to use an old CUDA version (e.g. v11.7) with a new glibc version you can get errors like this:
+
+```
+/usr/include/bits/mathcalls.h(83): error: exception specification is
+  incompatible with that of previous function "cospi"
+
+
+  /opt/cuda-11.7/bin/../targets/x86_64-linux/include/crt/math_functions.h(5545):
+  here
+```
+
+It seems the least bad solution is to patch the CUDA installation to declare the correct signatures.
+Replace the following lines in `/path/to/your/cuda/installation/targets/x86_64-linux/include/crt/math_functions.h`:
+
+```C++
+// original lines
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ double                 cospi(double x);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ float                  cospif(float x);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ double                 sinpi(double x);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ float                  sinpif(float x);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ double                 rsqrt(double x);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ float                  rsqrtf(float x);
+
+// edited lines
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ double                 cospi(double x) noexcept (true);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ float                  cospif(float x) noexcept (true);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ double                 sinpi(double x) noexcept (true);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ float                  sinpif(float x) noexcept (true);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ double                 rsqrt(double x) noexcept (true);
+extern __DEVICE_FUNCTIONS_DECL__ __device_builtin__ float                  rsqrtf(float x) noexcept (true);
+```
+
+### Runtime CUDA environmental variables
+
+You may set the [cuda environmental variables](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars) at runtime.
+
+```bash
+# Use `CUDA_VISIBLE_DEVICES` to hide the first compute device.
+CUDA_VISIBLE_DEVICES="-0" ./build/bin/llama-server --model /srv/models/llama.gguf
+```
+
+#### CUDA_SCALE_LAUNCH_QUEUES
+
+The environment variable [`CUDA_SCALE_LAUNCH_QUEUES`](https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/environment-variables.html#cuda-scale-launch-queues) controls the size of CUDA's command buffer, which determines how many GPU operations can be queued before the CPU must wait for the GPU to catch up. A larger buffer reduces CPU-side stalls and allows more work to be queued on a GPU.
+
+Consider setting `CUDA_SCALE_LAUNCH_QUEUES=4x`, which increases the CUDA command buffer to 4 times its default size. This optimization is particularly beneficial for **Multi-GPU setups with pipeline parallelism**, where it significantly improves prompt processing throughput by allowing more operations to be enqueued across GPUs.
+
+#### GGML_CUDA_CUBLAS_COMPUTE_TYPE
+
+Override default, speed-optimized compute types for cuBLAS matrix multiplications.
+Legal values: `auto`, `f16`, `fp16`, `bf16`, `f32`, `fp32`.
+
+#### GGML_CUDA_MMQ_PREC
+
+Override the activation precision that the model requests for NVFP4 and MXFP4 matrix multiplications.
+Currently supported values: `auto`, `q8`, `q4`.
+
+NVFP4 and MXFP4 layers marked as W4A16 request 8-bit activations, so on Blackwell those layers run through the W4A8 path instead of the native W4A4 path. Set `q4` to keep the native W4A4 path for faster prompt processing at the cost of accuracy, or `q8` to use the W4A8 path for every layer, `auto` uses per-tensor prec metadata (this is the same behavior as when the environment variable is not set).
+
+### Unified Memory
+
+The environment variable `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` can be used to enable unified memory in Linux. This allows swapping to system RAM instead of crashing when the GPU VRAM is exhausted. In Windows this setting is available in the NVIDIA control panel as `System Memory Fallback`.
+
+### Peer Access
+
+The environment variable `GGML_CUDA_P2P` can be set to enable peer-to-peer access between multiple GPUs, allowing them to transfer data directly rather than to go through system memory.
+Requires driver support (usually restricted to workstation/datacenter GPUs).
+May cause crashes or corrupted outputs for some motherboards and BIOS settings (e.g. IOMMU).
+
+### Performance Tuning
+
+The following compilation options are also available to tweak performance:
+
+| Option                        | Legal values           | Default | Description                                                                                                                                                                                                                                                                                                                                                                      |
+|-------------------------------|------------------------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| GGML_CUDA_FORCE_MMQ           | Boolean                | false   | Force the use of custom matrix multiplication kernels for quantized models instead of FP16 cuBLAS even if there is no int8 tensor core implementation available (affects V100, CDNA and RDNA3+). MMQ kernels are enabled by default on GPUs with int8 tensor core support. With MMQ force enabled, speed for large batch sizes will be worse but VRAM consumption will be lower. |
+| GGML_CUDA_FORCE_CUBLAS        | Boolean                | false   | Force the use of FP16 cuBLAS instead of custom matrix multiplication kernels for quantized models. There may be issues with numerical overflows (except for V100, CDNA and RDNA4 which use FP32 compute type by default) and memory use will be higher. Prompt processing may become faster on recent datacenter GPUs (the custom kernels were tuned primarily for RTX 3000/4000).   |
+| GGML_CUDA_FA_QUANTS           | `all` or `type_K-type_V` list | q4_0-q4_0;q8_0-q8_0;f16-f16;bf16-bf16 | Select which K/V type combinations to compile the FlashAttention CUDA kernels for. `all` compiles every combination, but compilation takes much longer. Otherwise a `;`-separated list of `type_K-type_V` pairs; f16-f16 is always compiled. Combinations that were not compiled fall back to f16-f16 kernel with a warning. Legal types: f16, bf16, q4_0, q4_1, q5_0, q5_1, q8_0. |
+| GGML_CUDA_FA_ALL_QUANTS       | Boolean                | false   | Deprecated alias for `GGML_CUDA_FA_QUANTS=all`.                                                                                                                                                                                                                                                                                                                               |
+
+## MUSA
+
+This provides GPU acceleration using a Moore Threads GPU. Make sure to have the [MUSA SDK](https://developer.mthreads.com/musa/musa-sdk) installed.
+
+#### Download directly from Moore Threads
+
+You may find the official downloads here: [Moore Threads developer site](https://developer.mthreads.com/sdk/download/musa).
+
+### Compilation
+
+```bash
+cmake -B build -DGGML_MUSA=ON
+cmake --build build --config Release
+```
+
+#### Override Compute Capability Specifications
+
+By default, all supported compute capabilities are enabled. To customize this behavior, you can specify the `MUSA_ARCHITECTURES` option in the CMake command:
+
+```bash
+cmake -B build -DGGML_MUSA=ON -DMUSA_ARCHITECTURES="31"
+cmake --build build --config Release
+```
+
+This configuration enables only compute capability `3.1` (MTT S5000) during compilation, which can help reduce compilation time.
+
+#### Compilation options
+
+Most of the compilation options available for CUDA should also be available for MUSA, though they haven't been thoroughly tested yet.
+
+- For static builds, add `-DBUILD_SHARED_LIBS=OFF` and `-DCMAKE_POSITION_INDEPENDENT_CODE=ON`:
+  ```
+  cmake -B build -DGGML_MUSA=ON \
+    -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+  cmake --build build --config Release
+  ```
+
+### Runtime MUSA environmental variables
+
+You may set the [musa environmental variables](https://docs.mthreads.com/musa-sdk/musa-sdk-doc-online/programming_guide/Z%E9%99%84%E5%BD%95/) at runtime.
+
+```bash
+# Use `MUSA_VISIBLE_DEVICES` to hide the first compute device.
+MUSA_VISIBLE_DEVICES="-0" ./build/bin/llama-server --model /srv/models/llama.gguf
+```
+
+### Unified Memory
+
+The environment variable `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` can be used to enable unified memory in Linux. This allows swapping to system RAM instead of crashing when the GPU VRAM is exhausted.
+
+## HIP
+
+This provides GPU acceleration on HIP-supported AMD GPUs.
+Make sure to have ROCm installed.
+You can download it from your Linux distro's package manager or from here: [ROCm Quick Start (Linux)](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/tutorial/quick-start.html#rocm-install-quick).
+
+- Using `CMake` for Linux (assuming a gfx1030-compatible AMD GPU):
+  ```bash
+  HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
+      cmake -S . -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1030 -DCMAKE_BUILD_TYPE=Release \
+      && cmake --build build --config Release -- -j 16
+  ```
+
+  Note: `GPU_TARGETS` is optional, omitting it will build the code for all GPUs in the current system.
+
+  Note that if you get the following error:
+  ```
+  clang: error: cannot find ROCm device library; provide its path via '--rocm-path' or '--rocm-device-lib-path', or pass '-nogpulib' to build without ROCm device library
+  ```
+  Try searching for a directory under `HIP_PATH` that contains the file
+  `oclc_abi_version_400.bc`. Then, add the following to the start of the
+  command: `HIP_DEVICE_LIB_PATH=<directory-you-just-found>`, so something
+  like:
+  ```bash
+  HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -p)" \
+  HIP_DEVICE_LIB_PATH=<directory-you-just-found> \
+      cmake -S . -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1030 -DCMAKE_BUILD_TYPE=Release \
+      && cmake --build build -- -j 16
+  ```
+
+- Using `CMake` for Windows (using x64 Native Tools Command Prompt for VS, and assuming a gfx1100-compatible AMD GPU):
+  ```bash
+  set PATH=%HIP_PATH%\bin;%PATH%
+  cmake -S . -B build -G Ninja -DGPU_TARGETS=gfx1100 -DGGML_HIP=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
+  cmake --build build
+  ```
+  If necessary, adapt `GPU_TARGETS` to the GPU arch you want to compile for. The above example uses `gfx1100` that corresponds to Radeon RX 7900XTX/XT/GRE. You can find a list of targets [here](https://llvm.org/docs/AMDGPUUsage.html#processors)
+  Find your gpu version string by matching the most significant version information from `rocminfo | grep gfx | head -1 | awk '{print $2}'` with the list of processors, e.g. `gfx1035` maps to `gfx1030`.
+
+
+The environment variable [`HIP_VISIBLE_DEVICES`](https://rocm.docs.amd.com/en/latest/understand/gpu_isolation.html#hip-visible-devices) can be used to specify which GPU(s) will be used.
+If your GPU is not officially supported you can use the environment variable [`HSA_OVERRIDE_GFX_VERSION`] set to a similar GPU, for example 10.3.0 on RDNA2 (e.g. gfx1030, gfx1031, or gfx1035) or 11.0.0 on RDNA3. Note that [`HSA_OVERRIDE_GFX_VERSION`] is [not supported on Windows](https://github.com/ROCm/ROCm/issues/2654)
+
+### Unified Memory
+
+On Linux it is possible to use unified memory architecture (UMA) to share main memory between the CPU and integrated GPU by setting environment variable `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1`. However, this hurts performance for non-integrated GPUs (but enables working with integrated GPUs).
+
+## Vulkan
+
+### For Windows Users:
+**w64devkit**
+
+Download and extract [`w64devkit`](https://github.com/skeeto/w64devkit/releases).
+
+Download and install the [`Vulkan SDK`](https://vulkan.lunarg.com/sdk/home#windows) with the default settings.
+
+Launch `w64devkit.exe` and run the following commands to copy Vulkan dependencies:
+```sh
+SDK_VERSION=1.3.283.0
+cp /VulkanSDK/$SDK_VERSION/Bin/glslc.exe $W64DEVKIT_HOME/bin/
+cp /VulkanSDK/$SDK_VERSION/Lib/vulkan-1.lib $W64DEVKIT_HOME/x86_64-w64-mingw32/lib/
+cp -r /VulkanSDK/$SDK_VERSION/Include/* $W64DEVKIT_HOME/x86_64-w64-mingw32/include/
+cat > $W64DEVKIT_HOME/x86_64-w64-mingw32/lib/pkgconfig/vulkan.pc <<EOF
+Name: Vulkan-Loader
+Description: Vulkan Loader
+Version: $SDK_VERSION
+Libs: -lvulkan-1
+EOF
+
+```
+
+Switch into the `llama.cpp` directory and build using CMake.
+```sh
+cmake -B build -DGGML_VULKAN=ON
+cmake --build build --config Release
+```
+
+**Git Bash MINGW64**
+
+Download and install [`Git-SCM`](https://git-scm.com/downloads/win) with the default settings
+
+Download and install [`Visual Studio Community Edition`](https://visualstudio.microsoft.com/) and make sure you select `C++`
+
+Download and install [`CMake`](https://cmake.org/download/) with the default settings
+
+Download and install the [`Vulkan SDK`](https://vulkan.lunarg.com/sdk/home#windows) with the default settings.
+
+Go into your `llama.cpp` directory and right click, select `Open Git Bash Here` and then run the following commands
+
+```
+cmake -B build -DGGML_VULKAN=ON
+cmake --build build --config Release
+```
+
+Now you can load the model in conversation mode using `Vulkan`
+
+```sh
+build/bin/Release/llama-cli -m "[PATH TO MODEL]" -ngl 100 -c 16384 -t 10 -n -2 -cnv
+```
+
+**MSYS2**
+
+Install [MSYS2](https://www.msys2.org/) and then run the following commands in a UCRT terminal to install dependencies.
+```sh
+pacman -S git \
+    mingw-w64-ucrt-x86_64-gcc \
+    mingw-w64-ucrt-x86_64-cmake \
+    mingw-w64-ucrt-x86_64-vulkan-devel \
+    mingw-w64-ucrt-x86_64-shaderc \
+    mingw-w64-ucrt-x86_64-spirv-headers
+```
+
+Switch into the `llama.cpp` directory and build using CMake.
+```sh
+cmake -B build -DGGML_VULKAN=ON
+cmake --build build --config Release
+```
+
+### For Docker users:
+
+You don't need to install the Vulkan SDK. It will be installed inside the container.
+
+```sh
+# Build the image
+docker build -t llama-cpp-vulkan --target light -f .devops/vulkan.Dockerfile .
+
+# Then, use it:
+docker run -it --rm -v "$(pwd):/app:Z" --device /dev/dri/renderD128:/dev/dri/renderD128 --device /dev/dri/card1:/dev/dri/card1 llama-cpp-vulkan -m "/app/models/YOUR_MODEL_FILE" -p "Building a website can be done in 10 simple steps:" -n 400 -e -ngl 33
+```
+
+### For Linux users:
+
+#### Using the LunarG Vulkan SDK
+
+First, follow the official LunarG instructions for the installation and setup of the Vulkan SDK in the [Getting Started with the Linux Tarball Vulkan SDK](https://vulkan.lunarg.com/doc/sdk/latest/linux/getting_started.html) guide.
+
+> [!IMPORTANT]
+> After completing the first step, ensure that you have used the `source` command on the `setup_env.sh` file inside of the Vulkan SDK in your current terminal session. Otherwise, the build won't work. Additionally, if you close out of your terminal, you must perform this step again if you intend to perform a build. However, there are ways to make this persistent. Refer to the Vulkan SDK guide linked in the first step for more information about any of this.
+
+#### Using system packages
+
+On Debian / Ubuntu, you can install the required dependencies using:
+```sh
+sudo apt-get install libvulkan-dev glslc spirv-headers
+```
+
+SPIRV-Headers (`spirv/unified1/spirv.hpp`) are required for the Vulkan backend and are **not** always pulled in by the Vulkan loader dev package alone. Other distros use names such as `spirv-headers` (Ubuntu / Debian / Arch), or `spirv-headers-devel` (Fedora / openSUSE). On Windows, the LunarG Vulkan SDK’s `Include` directory already contains these headers.
+
+#### Common steps
+
+Second, after verifying that you have followed all of the SDK installation/setup steps, use this command to make sure before proceeding:
+```bash
+vulkaninfo
+```
+
+Then, assuming you have `cd` into your llama.cpp folder and there are no errors with running `vulkaninfo`, you can proceed to build llama.cpp using the CMake commands below:
+```bash
+cmake -B build -DGGML_VULKAN=1
+cmake --build build --config Release
+```
+
+Finally, after finishing your build, you should be able to do something like this:
+```bash
+# Test the output binary
+# "-ngl 99" should offload all of the layers to GPU for most (if not all) models.
+./build/bin/llama-cli -m "PATH_TO_MODEL" -p "Hi you how are you" -ngl 99
+
+# You should see in the output, ggml_vulkan detected your GPU. For example:
+# ggml_vulkan: Using Intel(R) Graphics (ADL GT2) | uma: 1 | fp16: 1 | warp size: 32
+```
+
+### For Mac users:
+
+Generally, follow LunarG's [Getting Started with the MacOS Vulkan SDK](https://vulkan.lunarg.com/doc/sdk/latest/mac/getting_started.html) guide for installation and setup of the Vulkan SDK. There are two options of Vulkan drivers on macOS, both of which implement translation layers to map Vulkan to Metal. They can be hot-swapped by setting the `VK_ICD_FILENAMES` environment variable to point to the respective ICD JSON file.
+
+Check the box for "KosmicKrisp" during the LunarG Vulkan SDK installation.
+
+Set environment variable for the LunarG Vulkan SDK after installation (and optionally add to your shell profile for persistence):
+```bash
+source /path/to/vulkan-sdk/setup-env.sh
+```
+
+#### Using MoltenVK
+
+MoltenVK is the default Vulkan driver installed with the LunarG Vulkan SDK on macOS, so you can use the above environment variable settings as is.
+
+#### Using KosmicKrisp
+
+Override the environment variable for KosmicKrisp:
+```bash
+export VK_ICD_FILENAMES=$VULKAN_SDK/share/vulkan/icd.d/libkosmickrisp_icd.json
+export VK_DRIVER_FILES=$VULKAN_SDK/share/vulkan/icd.d/libkosmickrisp_icd.json
+```
+
+#### Build
+
+This is the only step different from [above](#common-steps) instructions.
+```bash
+cmake -B build -DGGML_VULKAN=1 -DGGML_METAL=OFF
+cmake --build build --config Release
+```
+
+## CANN
+This provides NPU acceleration using the AI cores of your Ascend NPU. And [CANN](https://www.hiascend.com/en/software/cann) is a hierarchical APIs to help you to quickly build AI applications and service based on Ascend NPU.
+
+For more information about Ascend NPU in [Ascend Community](https://www.hiascend.com/en/).
+
+Make sure to have the CANN toolkit installed. You can download it from here: [CANN Toolkit](https://www.hiascend.com/developer/download/community/result?module=cann)
+
+Go to `llama.cpp` directory and build using CMake.
+```bash
+cmake -B build -DGGML_CANN=on -DCMAKE_BUILD_TYPE=release
+cmake --build build --config release
+```
+
+You can test with:
+
+```bash
+./build/bin/llama-cli -m PATH_TO_MODEL -p "Building a website can be done in 10 steps:" -ngl 32
+```
+
+If the following info is output on screen, you are using `llama.cpp` with the CANN backend:
+```bash
+llm_load_tensors:       CANN model buffer size = 13313.00 MiB
+llama_new_context_with_model:       CANN compute buffer size =  1260.81 MiB
+```
+
+For detailed info, such as model/device supports, CANN install, please refer to [llama.cpp for CANN](./backend/CANN.md).
+
+## ZenDNN
+
+ZenDNN provides optimized deep learning primitives for AMD EPYC™ CPUs. It accelerates matrix multiplication operations for inference workloads.
+
+### Compilation
+
+- Using `CMake` on Linux (automatic build):
+
+    ```bash
+    cmake -B build -DGGML_ZENDNN=ON
+    cmake --build build --config Release
+    ```
+
+    The first build will automatically download and build ZenDNN, which may take 5-10 minutes. Subsequent builds will be much faster.
+
+- Using `CMake` with custom ZenDNN installation:
+
+    ```bash
+    cmake -B build -DGGML_ZENDNN=ON -DZENDNN_ROOT=/path/to/zendnn/install
+    cmake --build build --config Release
+    ```
+
+### Testing
+
+You can test with:
+
+```bash
+./build/bin/llama-cli -m PATH_TO_MODEL -p "Building a website can be done in 10 steps:" -n 50
+```
+
+For detailed information about hardware support, setup instructions, and performance optimization, refer to [llama.cpp for ZenDNN](./backend/ZenDNN.md).
+
+## Arm® KleidiAI™
+KleidiAI provides optimized Arm CPU microkernels used by the ggml CPU backend. Enabling it at build time makes those kernels available; it does not force every operation to use KleidiAI. At runtime, llama.cpp selects the best compatible CPU kernel from the detected CPU features, tensor type, operation shape, and active backend priority.
+
+Supported targets:
+
+| Platform | Supported ABI / architecture | Notes |
+| --- | --- | --- |
+| Linux | AArch64 / arm64 | Runtime CPU feature detection is automatic. |
+| Android | `arm64-v8a` | Use the Android NDK command below for a portable build. |
+| Apple | arm64 | Runtime CPU feature detection is automatic. Non-streaming SVE vector length is treated as unavailable. |
+| Windows | arm64 | Runtime CPU feature detection is automatic. SMCU count is treated as unknown until a detection path is verified. |
+
+`GGML_CPU_KLEIDIAI=ON` is valid only for AArch64/arm64 builds. Do not enable it for x86, 32-bit Arm, or Android ABIs other than `arm64-v8a`.
+
+### Native AArch64/arm64 build
+
+From the llama.cpp source directory:
+
+```bash
+cmake -S . -B build -DGGML_CPU_KLEIDIAI=ON
+cmake --build build --config Release
+```
+
+### Android arm64-v8a NDK build
+
+Set `ANDROID_NDK` to the Android NDK root, then run the following from the llama.cpp source directory. This command configures a portable Android `arm64-v8a` build with KleidiAI enabled and avoids Android dependencies that are not part of the NDK stable native API set.
+
+```bash
+cmake -S . -B build-android \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-28 \
+  -DGGML_CPU_KLEIDIAI=ON \
+  -DGGML_NATIVE=OFF \
+  -DGGML_OPENMP=OFF \
+  -DGGML_LLAMAFILE=OFF \
+  -DLLAMA_OPENSSL=OFF
+cmake --build build-android --config Release --parallel
+cmake --install build-android --prefix {install-dir} --config Release
+```
+
+Important Android options:
+
+- `GGML_CPU_KLEIDIAI=ON` enables KleidiAI for Android `arm64-v8a`.
+- `GGML_NATIVE=OFF` is required for cross-compilation because the build host CPU is not the Android target CPU.
+- `GGML_OPENMP=OFF` avoids adding an OpenMP runtime dependency to this NDK command-line build.
+- `GGML_LLAMAFILE=OFF` avoids the llamafile backend, which is not supported on Android.
+- `LLAMA_OPENSSL=OFF` avoids depending on OpenSSL, which is not part of the Android NDK stable native API set.
+
+The Android Studio project under `examples/llama.android` enables KleidiAI automatically for `arm64-v8a`. For Android command-line CMake builds on `arm64-v8a`, pass `-DGGML_CPU_KLEIDIAI=ON` explicitly.
+
+Global -march flags such as `-march=armv8.7a` flag are not required for a portable Android `arm64-v8a` build. Global `-march` flags raise the baseline instruction set for generic code. No manual architecture-specific source selection is required; llama.cpp selects compatible KleidiAI kernels at runtime. The KleidiAI libraries internal CMake handles the -march flags for each particular kernel.
+
+### Verifying the build
+
+Run an installed or in-tree binary:
+
+```bash
+./build/bin/llama-cli -m PATH_TO_MODEL -p "What is a car?"
+```
+
+If KleidiAI is enabled, the output contains a line similar to:
+
+```
+load_tensors: CPU_KLEIDIAI model buffer size =  3474.00 MiB
+```
+
+This confirms that the model has tensors allocated through the KleidiAI CPU buffer. It does not prove that every operation, or any specific SME-family operation, used a KleidiAI microkernel. Runtime CPU features, tensor type, operation shape, and backend priority still control dispatch.
+
+Depending on the build target, another backend may have higher priority than the CPU backend. To force CPU execution for a run, disable higher priority backends at build time, for example `-DGGML_METAL=OFF`, or use a runtime device option such as `--device none` where supported.
+
+### Runtime dispatch
+
+KleidiAI microkernels use Arm CPU features such as dotprod, i8mm, SVE, and SME/SME2. Build-time configuration makes the kernels available. Runtime dispatch selects a compatible kernel for the detected CPU and operation. Older or lower-feature CPUs fall back automatically to compatible kernels.
+
+KleidiAI accelerates selected `GGML_OP_MUL_MAT` paths for F32 and common quantized formats. Exact coverage depends on the bundled KleidiAI version and the llama.cpp runtime selector, so unsupported tensor types, unsupported operation shapes, or higher priority backends may bypass KleidiAI even when the CPU supports the required Arm feature. This is also why a model may not use SME-family kernels on SME-capable hardware.
+
+The current llama.cpp KleidiAI SVE selector only enables SVE kernels when the runtime SVE vector length is known to be QK8_0 bytes, currently 32 bytes. Linux and Android query this at runtime. Apple reports SVE capability separately from userspace non-streaming SVE availability, so llama.cpp treats the SVE vector length as unknown there. Windows exposes SVE feature presence but not the runtime SVE vector length used by this selector, so that value is also treated as unknown. Windows arm64 also treats SMCU count as unknown until a detection mechanism is verified.
+
+The set of available SME-family kernels depends on the bundled KleidiAI version and the detected CPU capabilities. Production configuration does not require any KleidiAI runtime environment variables.
+
+### Diagnostics and debug overrides
+
+KleidiAI runtime environment variables are diagnostics/debug overrides, not production configuration. Leave them unset for normal use.
+
+`GGML_KLEIDIAI_SME` controls SME-family kernel selection and overrides the maximum number of threads assigned to selected quantized SME-family kernels:
+
+- Not set: use automatic runtime detection.
+- `0`: disable SME-family kernels.
+- `<n> > 0`: enable compatible SME-family kernels and allow up to `<n>` threads for quantized SME-family kernels.
+
+On Windows arm64, use `GGML_KLEIDIAI_SME=<n>` as the temporary diagnostics/debug override for SME thread-cap calibration until automatic SMCU count detection is verified.
+
+If the CPU does not support the required SME-family capability for a bundled kernel, that kernel is disabled regardless of the environment variable.
+
+## OpenCL
+
+This provides GPU acceleration through OpenCL on recent Adreno GPU.
+More information about OpenCL backend can be found in [OPENCL.md](./backend/OPENCL.md) for more information.
+
+### Android
+
+Assume NDK is available in `$ANDROID_NDK`. First, install OpenCL headers and ICD loader library if not available,
+
+```sh
+mkdir -p ~/dev/llm
+cd ~/dev/llm
+
+git clone https://github.com/KhronosGroup/OpenCL-Headers && \
+cd OpenCL-Headers && \
+cp -r CL $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include
+
+cd ~/dev/llm
+
+git clone https://github.com/KhronosGroup/OpenCL-ICD-Loader && \
+cd OpenCL-ICD-Loader && \
+mkdir build_ndk && cd build_ndk && \
+cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DOPENCL_ICD_LOADER_HEADERS_DIR=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=24 \
+  -DANDROID_STL=c++_shared && \
+ninja && \
+cp libOpenCL.so $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android
+```
+
+Then build llama.cpp with OpenCL enabled,
+
+```sh
+cd ~/dev/llm
+
+git clone https://github.com/ggml-org/llama.cpp && \
+cd llama.cpp && \
+mkdir build-android && cd build-android
+
+cmake .. -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-28 \
+  -DBUILD_SHARED_LIBS=OFF \
+  -DGGML_OPENCL=ON
+
+ninja
+```
+
+### Windows Arm64
+
+First, install OpenCL headers and ICD loader library if not available,
+
+```powershell
+mkdir -p ~/dev/llm
+
+cd ~/dev/llm
+git clone https://github.com/KhronosGroup/OpenCL-Headers && cd OpenCL-Headers
+mkdir build && cd build
+cmake .. -G Ninja `
+  -DBUILD_TESTING=OFF `
+  -DOPENCL_HEADERS_BUILD_TESTING=OFF `
+  -DOPENCL_HEADERS_BUILD_CXX_TESTS=OFF `
+  -DCMAKE_INSTALL_PREFIX="$HOME/dev/llm/opencl"
+cmake --build . --target install
+
+cd ~/dev/llm
+git clone https://github.com/KhronosGroup/OpenCL-ICD-Loader && cd OpenCL-ICD-Loader
+mkdir build && cd build
+cmake .. -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_PREFIX_PATH="$HOME/dev/llm/opencl" `
+  -DCMAKE_INSTALL_PREFIX="$HOME/dev/llm/opencl"
+cmake --build . --target install
+```
+
+Then build llama.cpp with OpenCL enabled,
+
+```powershell
+cmake .. -G Ninja `
+  -DCMAKE_TOOLCHAIN_FILE="$HOME/dev/llm/llama.cpp/cmake/arm64-windows-llvm.cmake" `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_PREFIX_PATH="$HOME/dev/llm/opencl" `
+  -DBUILD_SHARED_LIBS=OFF `
+  -DGGML_OPENCL=ON
+ninja
+```
+
+## Android
+
+To read documentation for how to build on Android, [click here](./android.md)
+
+## WebGPU
+
+The WebGPU backend relies on [Dawn](https://dawn.googlesource.com/dawn). Follow the instructions [here](https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/quickstart-cmake.md) to install Dawn locally so that llama.cpp can find it using CMake. The current implementation is up-to-date with Dawn commit `94c3c9c`.
+
+In the llama.cpp directory, build with CMake:
+
+```
+cmake -B build -DGGML_WEBGPU=ON
+cmake --build build --config Release
+```
+
+### Browser Support
+
+WebGPU allows cross-platform access to the GPU from supported browsers. We utilize [Emscripten](https://emscripten.org/) to compile ggml's WebGPU backend to WebAssembly. Emscripten does not officially support WebGPU bindings yet, but Dawn currently maintains its own WebGPU bindings called emdawnwebgpu.
+
+Follow the instructions [here](https://dawn.googlesource.com/dawn/+/refs/heads/main/src/emdawnwebgpu/) to download or build the emdawnwebgpu package (Note that it might be safer to build the emdawnwebgpu package locally, so that it stays in sync with the version of Dawn you have installed above). When building using CMake, the path to the emdawnwebgpu port file needs to be set with the flag `EMDAWNWEBGPU_DIR`.
+
+## IBM Z & LinuxONE
+
+To read documentation for how to build on IBM Z & LinuxONE, [click here](./build-s390x.md)
+
+## OpenVINO
+
+[OpenVINO](https://docs.openvino.ai/) is an open-source toolkit for optimizing and deploying high-performance AI inference, specifically designed for Intel hardware (CPUs, GPUs, and NPUs).
+
+For build instructions and usage examples, refer to [OPENVINO.md](backend/OPENVINO.md).
+
+### Hexagon
+
+Check [README.md](./backend/snapdragon/README.md) for target specific build and run info.
+
+---
+## Notes about GPU-accelerated backends
+
+The GPU may still be used to accelerate some parts of the computation even when using the `-ngl 0` option. You can fully disable GPU acceleration by using `--device none`.
+
+In most cases, it is possible to build and use multiple backends at the same time. For example, you can build llama.cpp with both CUDA and Vulkan support by using the `-DGGML_CUDA=ON -DGGML_VULKAN=ON` options with CMake. At runtime, you can specify which backend devices to use with the `--device` option. To see a list of available devices, use the `--list-devices` option.
+
+Backends can be built as dynamic libraries that can be loaded dynamically at runtime. This allows you to use the same llama.cpp binary on different machines with different GPUs. To enable this feature, use the `GGML_BACKEND_DL` option when building.
+# LLaMA.cpp HTTP Server
+
+Fast, lightweight, pure C/C++ HTTP server based on [httplib](https://github.com/yhirose/cpp-httplib), [nlohmann::json](https://github.com/nlohmann/json) and **llama.cpp**.
+
+Set of LLM REST APIs and a web UI to interact with llama.cpp.
+
+**Features:**
+ * LLM inference of F16 and quantized models on GPU and CPU
+ * [OpenAI API](https://github.com/openai/openai-openapi) compatible chat completions, responses, and embeddings routes
+ * [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) compatible chat completions
+ * Reranking endpoint (https://github.com/ggml-org/llama.cpp/pull/9510)
+ * Parallel decoding with multi-user support
+ * Continuous batching
+ * Multimodal ([documentation](../../docs/multimodal.md)) / with OpenAI-compatible API support
+ * Monitoring endpoints
+ * Schema-constrained JSON response format
+ * Prefilling of assistant messages similar to the Claude API
+ * [Function calling](../../docs/function-calling.md) / tool use for ~any model
+ * Speculative decoding
+ * Easy-to-use web UI
+
+For the full list of features, please refer to [server's changelog](https://github.com/ggml-org/llama.cpp/issues/9291)
+
+## Usage
+
+<!-- HELP_START -->
+
+<!-- IMPORTANT: The list below is auto-generated by llama-gen-docs; do NOT modify it manually -->
+
+### Common params
+
+| Argument | Explanation |
+| -------- | ----------- |
+| `-h, --help, --usage` | print usage and exit |
+| `--version` | show version and build info |
+| `-cl, --cache-list` | show list of models in cache |
+| `--completion-bash` | print source-able bash completion script for llama.cpp |
+| `-t, --threads N` | number of CPU threads to use during generation (default: -1)<br/>(env: LLAMA_ARG_THREADS) |
+| `-tb, --threads-batch N` | number of threads to use during batch and prompt processing (default: same as --threads) |
+| `-C, --cpu-mask M` | CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "") |
+| `-Cr, --cpu-range lo-hi` | range of CPUs for affinity. Complements --cpu-mask |
+| `--cpu-strict <0\|1>` | use strict CPU placement (default: 0) |
+| `--prio N` | set process/thread priority : low(-1), normal(0), medium(1), high(2), realtime(3) (default: 0) |
+| `--poll <0...100>` | use polling level to wait for work (0 - no polling, default: 50) |
+| `-Cb, --cpu-mask-batch M` | CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask) |
+| `-Crb, --cpu-range-batch lo-hi` | ranges of CPUs for affinity. Complements --cpu-mask-batch |
+| `--cpu-strict-batch <0\|1>` | use strict CPU placement (default: same as --cpu-strict) |
+| `--prio-batch N` | set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: 0) |
+| `--poll-batch <0\|1>` | use polling to wait for work (default: same as --poll) |
+| `-c, --ctx-size N` | size of the prompt context (default: 0, 0 = loaded from model)<br/>(env: LLAMA_ARG_CTX_SIZE) |
+| `-n, --predict, --n-predict N` | number of tokens to predict (default: -1, -1 = infinity)<br/>(env: LLAMA_ARG_N_PREDICT) |
+| `-b, --batch-size N` | logical maximum batch size (default: 2048)<br/>(env: LLAMA_ARG_BATCH) |
+| `-ub, --ubatch-size N` | physical maximum batch size (default: 512)<br/>(env: LLAMA_ARG_UBATCH) |
+| `--keep N` | number of tokens to keep from the initial prompt (default: 0, -1 = all) |
+| `--swa-full` | use full-size SWA cache (default: false)<br/>[(more info)](https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)<br/>(env: LLAMA_ARG_SWA_FULL) |
+| `-fa, --flash-attn [on\|off\|auto]` | set Flash Attention use ('on', 'off', or 'auto', default: 'auto')<br/>(env: LLAMA_ARG_FLASH_ATTN) |
+| `--perf, --no-perf` | whether to enable internal libllama performance timings (default: false)<br/>(env: LLAMA_ARG_PERF) |
+| `-e, --escape, --no-escape` | whether to process escapes sequences (\n, \r, \t, \', \", \\) (default: true) |
+| `--rope-scaling {none,linear,yarn}` | RoPE frequency scaling method, defaults to linear unless specified by the model<br/>(env: LLAMA_ARG_ROPE_SCALING_TYPE) |
+| `--rope-scale N` | RoPE context scaling factor, expands context by a factor of N<br/>(env: LLAMA_ARG_ROPE_SCALE) |
+| `--rope-freq-base N` | RoPE base frequency, used by NTK-aware scaling (default: loaded from model)<br/>(env: LLAMA_ARG_ROPE_FREQ_BASE) |
+| `--rope-freq-scale N` | RoPE frequency scaling factor, expands context by a factor of 1/N<br/>(env: LLAMA_ARG_ROPE_FREQ_SCALE) |
+| `--yarn-orig-ctx N` | YaRN: original context size of model (default: 0 = model training context size)<br/>(env: LLAMA_ARG_YARN_ORIG_CTX) |
+| `--yarn-ext-factor N` | YaRN: extrapolation mix factor (default: -1.00, 0.0 = full interpolation)<br/>(env: LLAMA_ARG_YARN_EXT_FACTOR) |
+| `--yarn-attn-factor N` | YaRN: scale sqrt(t) or attention magnitude (default: -1.00)<br/>(env: LLAMA_ARG_YARN_ATTN_FACTOR) |
+| `--yarn-beta-slow N` | YaRN: high correction dim or alpha (default: -1.00)<br/>(env: LLAMA_ARG_YARN_BETA_SLOW) |
+| `--yarn-beta-fast N` | YaRN: low correction dim or beta (default: -1.00)<br/>(env: LLAMA_ARG_YARN_BETA_FAST) |
+| `-kvo, --kv-offload, -nkvo, --no-kv-offload` | whether to enable KV cache offloading (default: enabled)<br/>(env: LLAMA_ARG_KV_OFFLOAD) |
+| `--repack, -nr, --no-repack` | whether to enable weight repacking (default: enabled)<br/>(env: LLAMA_ARG_REPACK) |
+| `--no-host` | bypass host buffer allowing extra buffers to be used<br/>(env: LLAMA_ARG_NO_HOST) |
+| `-ctk, --cache-type-k TYPE` | KV cache data type for K<br/>allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1<br/>(default: f16)<br/>(env: LLAMA_ARG_CACHE_TYPE_K) |
+| `-ctv, --cache-type-v TYPE` | KV cache data type for V<br/>allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1<br/>(default: f16)<br/>(env: LLAMA_ARG_CACHE_TYPE_V) |
+| `-dt, --defrag-thold N` | KV cache defragmentation threshold (DEPRECATED)<br/>(env: LLAMA_ARG_DEFRAG_THOLD) |
+| `--rpc SERVERS` | comma-separated list of RPC servers (host:port)<br/>(env: LLAMA_ARG_RPC) |
+| `-lm, --load-mode MODE` | model loading mode (default: auto)<br/>- auto: mmap, unless a device does not support it<br/>- none: no special loading mode<br/>- mmap: memory-map model (if mmap disabled, slower load but may reduce pageouts if not using mlock)<br/>- mlock: force system to keep model in RAM rather than swapping or compressing<br/>- mmap+mlock: mmap + force system to keep model in RAM rather than swapping or compressing<br/>- dio: use DirectIO if available<br/><br/>(env: LLAMA_ARG_LOAD_MODE) |
+| `-lzm, --lazy-mode MODE` | on-demand reading of certain tensors, for example per-layer embeddings (default: auto)<br/>- on: read the rows of such tensors from disk on demand instead of keeping them resident (requires mmap)<br/>- auto: on, but only for tensors larger than 4 GiB<br/>- off: always keep them resident<br/>(env: LLAMA_ARG_LAZY_MODE) |
+| `--numa TYPE` | attempt optimizations that help on some NUMA systems<br/>- distribute: spread execution evenly over all nodes<br/>- isolate: only spawn threads on CPUs on the node that execution started on<br/>- numactl: use the CPU map provided by numactl<br/>if run without this previously, it is recommended to drop the system page cache before using this<br/>see https://github.com/ggml-org/llama.cpp/issues/1437<br/>(env: LLAMA_ARG_NUMA) |
+| `-dev, --device <dev1,dev2,..>` | comma-separated list of devices to use for offloading (none = don't offload)<br/>use --list-devices to see a list of available devices<br/>(env: LLAMA_ARG_DEVICE) |
+| `--list-devices` | print list of available devices and exit |
+| `-ot, --override-tensor <tensor name pattern>=<buffer type>,...` | override tensor buffer type<br/>(env: LLAMA_ARG_OVERRIDE_TENSOR) |
+| `-cmoe, --cpu-moe` | keep all Mixture of Experts (MoE) weights in the CPU<br/>(env: LLAMA_ARG_CPU_MOE) |
+| `-ncmoe, --n-cpu-moe N` | keep the Mixture of Experts (MoE) weights of the first N layers in the CPU<br/>(env: LLAMA_ARG_N_CPU_MOE) |
+| `-ncffn, --n-cpu-ffn N` | keep the dense FFN weights of the first N layers in the CPU<br/>(dense models; for MoE expert weights use --n-cpu-moe)<br/>(env: LLAMA_ARG_N_CPU_FFN) |
+| `-ngl, --gpu-layers, --n-gpu-layers N` | max. number of layers to store in VRAM, either an exact number, 'auto', or 'all' (default: auto)<br/>(env: LLAMA_ARG_N_GPU_LAYERS) |
+| `-sm, --split-mode {none,layer,row,tensor}` | how to split the model across multiple GPUs, one of:<br/>- none: use one GPU only<br/>- layer (default): split layers and KV across GPUs (pipelined)<br/>- row: split weight across GPUs by rows (parallelized)<br/>- tensor: split weights and KV across GPUs (parallelized, EXPERIMENTAL)<br/>(env: LLAMA_ARG_SPLIT_MODE) |
+| `-ts, --tensor-split N0,N1,N2,...` | fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1<br/>(env: LLAMA_ARG_TENSOR_SPLIT) |
+| `-mg, --main-gpu INDEX` | the GPU to use for the model (with split-mode = none), or for intermediate results and KV (with split-mode = row) (default: 0)<br/>(env: LLAMA_ARG_MAIN_GPU) |
+| `-fit, --fit [on\|off]` | whether to adjust unset arguments to fit in device memory ('on' or 'off', default: 'on')<br/>(env: LLAMA_ARG_FIT) |
+| `-fitt, --fit-target MiB0,MiB1,MiB2,...` | target margin per device for --fit, comma-separated list of values, single value is broadcast across all devices, default: 1024<br/>(env: LLAMA_ARG_FIT_TARGET) |
+| `-fitc, --fit-ctx N` | minimum ctx size that can be set by --fit option, default: 4096<br/>(env: LLAMA_ARG_FIT_CTX) |
+| `--check-tensors` | check model tensor data for invalid values (default: false) |
+| `--override-kv KEY=TYPE:VALUE,...` | advanced option to override model metadata by key. to specify multiple overrides, either use comma-separated values.<br/>types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false,tokenizer.ggml.add_eos_token=bool:false |
+| `--op-offload, --no-op-offload` | whether to offload host tensor operations to device (default: true) |
+| `--lora FNAME` | path to LoRA adapter (use comma-separated values to load multiple adapters) |
+| `--lora-scaled FNAME:SCALE,...` | path to LoRA adapter with user defined scaling (format: FNAME:SCALE,...)<br/>note: use comma-separated values |
+| `--control-vector FNAME` | add a control vector<br/>note: use comma-separated values to add multiple control vectors |
+| `--control-vector-scaled FNAME:SCALE,...` | add a control vector with user defined scaling SCALE<br/>note: use comma-separated values (format: FNAME:SCALE,...) |
+| `--control-vector-layer-range START END` | layer range to apply the control vector(s) to, start and end inclusive |
+| `-m, --model FNAME` | model path to load<br/>(env: LLAMA_ARG_MODEL) |
+| `-mu, --model-url MODEL_URL` | model download url (default: unused)<br/>(env: LLAMA_ARG_MODEL_URL) |
+| `-dr, --docker-repo [<repo>/]<model>[:quant]` | Docker Hub model repository. repo is optional, default to ai/. quant is optional, default to :latest.<br/>example: gemma3<br/>(default: unused)<br/>(env: LLAMA_ARG_DOCKER_REPO) |
+| `-hf, -hfr, --hf-repo <user>/<model>[:quant]` | Hugging Face model repository; quant is optional, case-insensitive, default to Q4_K_M, or falls back to the first file in the repo if Q4_K_M doesn't exist.<br/>mmproj is also downloaded automatically if available. to disable, add --no-mmproj<br/>example: ggml-org/GLM-4.7-Flash-GGUF:Q4_K_M<br/>(default: unused)<br/>(env: LLAMA_ARG_HF_REPO) |
+| `-hff, --hf-file FILE` | Hugging Face model file. If specified, it will override the quant in --hf-repo (default: unused)<br/>(env: LLAMA_ARG_HF_FILE) |
+| `-hft, --hf-token TOKEN` | Hugging Face access token (default: value from HF_TOKEN environment variable)<br/>(env: HF_TOKEN) |
+| `--log-disable` | Log disable |
+| `--log-file FNAME` | Log to file<br/>(env: LLAMA_ARG_LOG_FILE) |
+| `--log-jsonl, --no-log-jsonl` | Log as JSONL (one JSON object per line) to stdout, this also disables colored logging (default: disabled)<br/>(env: LLAMA_ARG_LOG_JSONL) |
+| `--log-colors [on\|off\|auto]` | Set colored logging ('on', 'off', or 'auto', default: 'auto')<br/>'auto' enables colors when output is to a terminal<br/>(env: LLAMA_ARG_LOG_COLORS) |
+| `-v, --verbose, --log-verbose` | Set verbosity level to infinity (i.e. log all messages, useful for debugging) |
+| `--offline` | Offline mode: forces use of cache, prevents network access<br/>(env: LLAMA_ARG_OFFLINE) |
+| `-lv, --verbosity, --log-verbosity N` | Set the verbosity threshold. Messages with a higher verbosity will be ignored. Values:<br/> - 0: generic output<br/> - 1: error<br/> - 2: warning<br/> - 3: info<br/> - 4: trace (more info)<br/> - 5: debug<br/>(default: 3)<br/><br/>(env: LLAMA_ARG_LOG_VERBOSITY) |
+| `--log-prefix, --no-log-prefix` | Enable prefix in log messages<br/>(env: LLAMA_ARG_LOG_PREFIX) |
+| `--log-timestamps, --no-log-timestamps` | Enable timestamps in log messages<br/>(env: LLAMA_ARG_LOG_TIMESTAMPS) |
+| `--spec-draft-type-k, -ctkd, --cache-type-k-draft TYPE` | KV cache data type for K for the draft model<br/>allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1<br/>(default: f16)<br/>(env: LLAMA_ARG_SPEC_DRAFT_CACHE_TYPE_K) |
+| `--spec-draft-type-v, -ctvd, --cache-type-v-draft TYPE` | KV cache data type for V for the draft model<br/>allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1<br/>(default: f16)<br/>(env: LLAMA_ARG_SPEC_DRAFT_CACHE_TYPE_V) |
+
+
+### Sampling params
+
+| Argument | Explanation |
+| -------- | ----------- |
+| `--samplers SAMPLERS` | samplers that will be used for generation in the order, separated by ';'<br/>(default: penalties;dry;top_n_sigma;top_k;typ_p;top_p;min_p;xtc;temperature) |
+| `-s, --seed SEED` | RNG seed (default: -1, use random seed for -1) |
+| `--sampler-seq, --sampling-seq SEQUENCE` | simplified sequence for samplers that will be used (default: edskypmxt) |
+| `--ignore-eos` | ignore end of stream token and continue generating (implies --logit-bias EOS-inf) |
+| `--temp, --temperature N` | temperature (default: 0.80)<br/>(env: LLAMA_ARG_TEMPERATURE) |
+| `--top-k N` | top-k sampling (default: 40, 0 = disabled)<br/>(env: LLAMA_ARG_TOP_K) |
+| `--top-p N` | top-p sampling (default: 0.95, 1.0 = disabled)<br/>(env: LLAMA_ARG_TOP_P) |
+| `--min-p N` | min-p sampling (default: 0.05, 0.0 = disabled)<br/>(env: LLAMA_ARG_MIN_P) |
+| `--top-nsigma, --top-n-sigma N` | top-n-sigma sampling (default: -1.00, -1.0 = disabled) |
+| `--xtc-probability N` | xtc probability (default: 0.00, 0.0 = disabled) |
+| `--xtc-threshold N` | xtc threshold (default: 0.10, 1.0 = disabled) |
+| `--typical, --typical-p N` | locally typical sampling, parameter p (default: 1.00, 1.0 = disabled) |
+| `--repeat-last-n N` | last n tokens to consider for penalize (default: 64, 0 = disabled) |
+| `--repeat-penalty N` | penalize repeat sequence of tokens (default: 1.00, 1.0 = disabled)<br/>(env: LLAMA_ARG_REPEAT_PENALTY) |
+| `--presence-penalty N` | repeat alpha presence penalty (default: 0.00, 0.0 = disabled)<br/>(env: LLAMA_ARG_PRESENCE_PENALTY) |
+| `--frequency-penalty N` | repeat alpha frequency penalty (default: 0.00, 0.0 = disabled)<br/>(env: LLAMA_ARG_FREQUENCY_PENALTY) |
+| `--dry-multiplier N` | set DRY sampling multiplier (default: 0.00, 0.0 = disabled) |
+| `--dry-base N` | set DRY sampling base value (default: 1.75) |
+| `--dry-allowed-length N` | set allowed length for DRY sampling (default: 2) |
+| `--dry-penalty-last-n N` | set DRY penalty for the last n tokens (default: 64, 0 = disable) |
+| `--dry-sequence-breaker STRING` | add sequence breaker for DRY sampling, clearing out default breakers ('\n', ':', '"', '*') in the process; use "none" to not use any sequence breakers |
+| `--adaptive-target N` | adaptive-p: select tokens near this probability (valid range 0.0 to 1.0; negative = disabled) (default: -1.00)<br/>[(more info)](https://github.com/ggml-org/llama.cpp/pull/17927) |
+| `--adaptive-decay N` | adaptive-p: decay rate for target adaptation over time. lower values are more reactive, higher values are more stable.<br/>(valid range 0.0 to 0.99) (default: 0.90) |
+| `--dynatemp-range N` | dynamic temperature range (default: 0.00, 0.0 = disabled) |
+| `--dynatemp-exp N` | dynamic temperature exponent (default: 1.00) |
+| `--mirostat N` | use Mirostat sampling.<br/>Top K, Nucleus and Locally Typical samplers are ignored if used.<br/>(default: 0, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0) |
+| `--mirostat-lr N` | Mirostat learning rate, parameter eta (default: 0.10) |
+| `--mirostat-ent N` | Mirostat target entropy, parameter tau (default: 5.00) |
+| `-l, --logit-bias TOKEN_ID(+/-)BIAS` | modifies the likelihood of token appearing in the comp
