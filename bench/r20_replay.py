@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Replay the R20 cohort tasks (balanced-v1 sampling) directly against a server.
+"""Replay the story, explanation and python100 tasks with fixed sampling directly against a server.
 
-Same task prompts and sampling as the OpenCode R20 run, without the OpenCode client and
-tool execution. Measures decode tok/s, tokens per verify step and ms per step.
+Reports decode tok/s, tokens per verify step, ms per step and output hashes per task.
 
 Usage: r20_replay.py [--url http://127.0.0.1:8080] [--tasks story explanation python100]
 """
@@ -34,7 +33,7 @@ def body(name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://127.0.0.1:8080")
-    ap.add_argument("--tasks", nargs="+", default=["story", "explanation", "python100"])
+    ap.add_argument("--tasks", nargs="+", choices=["story", "explanation", "python100"], default=["story", "explanation", "python100"])
     ap.add_argument("--out")
     a = ap.parse_args()
     rows = []

@@ -86,16 +86,16 @@ def main():
         if status == 200:
             try:
                 ok = bool(check(data))
-            except Exception as e:  # noqa: BLE001 - report any malformed response as a failure
+            except Exception as e:
                 detail = f"check error: {e!r}"
-            tps = data.get("timings", {}).get("predicted_per_second")
+            tps = (data.get("timings") or {}).get("predicted_per_second")
             detail = detail or f"tps={tps:.1f}" if tps else detail
         else:
             detail = str(data)[:300]
         failed += not ok
         print(f"{'PASS' if ok else 'FAIL'} {name:20s} http={status} {wall:6.1f}s {detail}", flush=True)
         if not ok and status == 200:
-            print("   ", json.dumps(data["choices"][0]["message"])[:400])
+            print("   ", json.dumps(data)[:400])
     print(f"{len(cases) - failed}/{len(cases)} passed")
     sys.exit(1 if failed else 0)
 

@@ -17,7 +17,8 @@ Keep it linear; add an `Assisted-by:` trailer when an assistant wrote the change
 ## 2. Test
 
 The test server needs ~20 GB of GPU memory, so stop other GPU users (and a production server on
-the same GPU) first.
+the same GPU) first. Run the backend checks (`build/bin/...`, `compute-sanitizer`) from `llama.cpp/`
+and the `bench/` commands from the workbench root.
 
 - Kernel labs first: `kernels/lab_all.cu` (`EXACT_BASELINE=1` for whole-output comparison with
   the production configuration), see [design/experiments.md](design/experiments.md).
@@ -28,11 +29,15 @@ the same GPU) first.
   (port 8181), then `bench/compat_check.py --url http://127.0.0.1:8181` must print `9/9 passed`.
 - Output-preserving changes: `bench/ab_bins.sh <copy of the old build/bin> llama.cpp/build/bin`
   must print the same `sha=` per task for both builds; compare `ms/step` over 2+ rounds.
-- Speed: `bench/r20_replay.py`, `bench/agent_bench.py` (tool catalog, 2.6K and 30K context) and
-  `bench/bench.py` (plain chat). Small differences (< ~0.2 ms/step, +-5 tok/s) need repeated runs.
+- Speed: `bench/r20_replay.py --url http://127.0.0.1:8181`, `bench/agent_bench.py` (tool catalog,
+  2.6K and 30K context) and `bench/bench.py` (plain chat). `bench.py` starts its own server on port
+  8181, so stop the test server first; it needs `--name`, plus `--draft` with `--spec dflash`, e.g.
+  `bench/bench.py --name dflash --spec dflash --draft models/...gguf`.
+  Small differences (< ~0.2 ms/step, +-5 tok/s) need repeated runs.
 
-`bench/serve_test.sh` expects the GGUFs in the Nix store or via `MODEL`, `DRAFT`, `MMPROJ`
-and a chat template in `models/chat-template.jinja`.
+`bench/serve_test.sh` expects the GGUFs in the Nix store or via `MODEL`, `DRAFT` and optionally
+`MMPROJ` (no `--mmproj` without it), and a chat template in `models/chat-template.jinja` or `TEMPLATE`.
+`PORT` (default 8181) changes the port; the wrapper scripts use the same `PORT`.
 
 Runtime switches:
 

@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
 """Fine-tune the DFlash2 drafter on the deployed target's own outputs and features.
 
-Objective per anchor a (block = [tok[a], MASK x (B-1)], position k predicts tok[a+k]):
-  * unary loss: CE of the drafter distribution against the target's *sampling*
-    distribution (top-k 20 / top-p 0.95 truncation of the dumped top-32 logits at
-    position a+k-1), weighted by exp(-(k-1)/gamma);
-  * selector loss: CE over the drafter's own top-16 candidates for the actual
-    token, with the actual previous token as predecessor (teacher forcing).
-
-Checkpoint selection uses the mean leading-match length of the greedy selector
-path against the recorded (sampled) continuation. For a deterministic draft and
-lossless speculative sampling, P(accept d_1..d_k) = P(target samples d_1..d_k),
-so this is an unbiased estimate of the accepted length per step.
+Loss: CE against the truncated target sampling distribution plus a teacher-forced selector CE.
+Checkpoints are selected by the mean leading-match length of the greedy draft path against the recorded continuation.
 """
 
 import argparse

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Sanity check: repeated steps on 4 fixed sequences must drive their loss down."""
-import random
 from pathlib import Path
 
 import torch
@@ -37,11 +36,15 @@ def run(train):
     return tu / tw, ts / tws
 
 
-print("before", run(False))
+before = run(False)
+print("before", before)
 for s in range(30):
     u = run(True)
     gn = torch.nn.utils.clip_grad_norm_(big + small, 1.0)
     opt.step(); opt.zero_grad(set_to_none=True)
     if s % 5 == 0:
         print(s, "train", u, "gradnorm", float(gn))
-print("after", run(False))
+after = run(False)
+print("after", after)
+if not all(y < x for x, y in zip(before, after)):
+    raise SystemExit(f"loss did not decrease: before={before} after={after}")

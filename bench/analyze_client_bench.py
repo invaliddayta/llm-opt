@@ -2,6 +2,7 @@
 """Report completed-task rates and exact-output-matched client/API replay rates."""
 import argparse
 from collections import defaultdict
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -11,23 +12,32 @@ from opencode_client_bench import consume_sse, validate_record
 
 
 def generation(path):
-    record = {"events": []}
-    buffer = b""
-    with path.open("rb") as source:
-        while chunk := source.read(65536):
-            buffer = consume_sse(record, buffer, chunk)
-    consume_sse(record, buffer, b"", final=True)
+    raw = path.read_bytes()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    if raw.lstrip()[:1] == b"{":
+        events = [{"choices": [choice | {"delta": choice.get("message", {})} for choice in json.loads(raw).get("choices", [])]}]
+    else:
+        record = {"events": []}
+        buffer = b""
+        for i in range(0, len(raw), 65536):
+            buffer = consume_sse(record, buffer, raw[i:i + 65536])
+        consume_sse(record, buffer, b"", final=True)
+        events = record["events"]
     parts = defaultdict(str)
-    for event in record["events"]:
+    for event in events:
         for choice in event.get("choices", []):
             prefix = str(choice.get("index", 0))
-            delta = choice.get("delta", {})
+            delta = choice.get("delta") or {}
             for field in ("content", "reasoning_content"):
                 if isinstance(delta.get(field), str):
                     parts[prefix + ":" + field] += delta[field]
-            for call in delta.get("tool_calls", []):
-                for field, text in call.get("function", {}).items():
-                    parts[prefix + ":tool:" + str(call["index"]) + ":" + field] += text
+            for i, call in enumerate(delta.get("tool_calls") or []):
+                for field, text in (call.get("function") or {}).items():
+                    if isinstance(text, str):
+                        parts[prefix + ":tool:" + str(call.get("index", i)) + ":" + field] += text
+    if not parts:
+        raise ValueError(f"No generated text or tool calls in {path}")
     return hashlib.sha256(json.dumps(dict(parts), sort_keys=True).encode()).hexdigest()
 
 

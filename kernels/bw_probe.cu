@@ -1,6 +1,10 @@
 // Measure achievable DRAM read bandwidth on this GPU (the roofline for weight streaming).
 #include <cstdio>
+#include <cstdlib>
+#include <initializer_list>
 #include <cuda_runtime.h>
+
+#define CK(x) do { cudaError_t e = (x); if (e != cudaSuccess) { printf("CUDA %s @%d: %s\n", #x, __LINE__, cudaGetErrorString(e)); exit(1); } } while (0)
 
 __global__ void read_kernel(const int4 * __restrict__ p, size_t n, int4 * out) {
     int4 acc = make_int4(0, 0, 0, 0);
@@ -14,18 +18,20 @@ __global__ void read_kernel(const int4 * __restrict__ p, size_t n, int4 * out) {
 int main() {
     const size_t bytes = (size_t) 1 << 30;
     int4 * p; int4 * out;
-    cudaMalloc(&p, bytes); cudaMalloc(&out, 16);
-    cudaMemset(p, 1, bytes);
-    cudaEvent_t a, b; cudaEventCreate(&a); cudaEventCreate(&b);
-    int sms; cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
+    CK(cudaMalloc(&p, bytes)); CK(cudaMalloc(&out, 16));
+    CK(cudaMemset(p, 1, bytes));
+    cudaEvent_t a, b; CK(cudaEventCreate(&a)); CK(cudaEventCreate(&b));
+    int sms; CK(cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0));
     for (int bpsm : {2, 4, 8, 16}) {
         for (int it = 0; it < 2; ++it) {
-            cudaEventRecord(a);
-            for (int r = 0; r < 5; ++r) read_kernel<<<sms * bpsm, 256>>>(p, bytes / 16, out);
-            cudaEventRecord(b); cudaEventSynchronize(b);
-            float ms; cudaEventElapsedTime(&ms, a, b);
+            CK(cudaEventRecord(a));
+            for (int r = 0; r < 5; ++r) { read_kernel<<<sms * bpsm, 256>>>(p, bytes / 16, out); CK(cudaGetLastError()); }
+            CK(cudaEventRecord(b)); CK(cudaEventSynchronize(b));
+            float ms; CK(cudaEventElapsedTime(&ms, a, b));
             if (it == 1) printf("blocks/SM %2d: %.1f GB/s\n", bpsm, 5.0 * (double) bytes / (ms * 1e6));
         }
     }
+    CK(cudaEventDestroy(a)); CK(cudaEventDestroy(b));
+    CK(cudaFree(p)); CK(cudaFree(out));
     return 0;
 }

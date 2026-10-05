@@ -79,7 +79,7 @@ def apply_rope(x, cos, sin):
 class GroupedConv(nn.Module):
     """DFlash2 two-tap dynamic depthwise conv inside each block (matches build_dflash2_conv)."""
 
-    def __init__(self, base_kernel, proj_w, group_size, lora_rank, lora_alpha):
+    def __init__(self, base_kernel, proj_w, group_size):
         super().__init__()
         self.base_kernel = nn.Parameter(base_kernel.float())  # [2 side, taps, C]
         self.kernel_projection = nn.Parameter(proj_w.float())  # [2*taps*G, C], fully trained (small)
@@ -127,8 +127,8 @@ class Layer(nn.Module):
         self.up_proj = LoRALinear(g("mlp.up_proj.weight"), rank, alpha)
         self.down_proj = LoRALinear(g("mlp.down_proj.weight"), rank, alpha)
         gs = cfg["dflash_config"]["conv_group_size"]
-        self.attention_conv = GroupedConv(g("attention_conv.base_kernel"), g("attention_conv.kernel_projection.weight"), gs, rank, alpha)
-        self.mlp_conv = GroupedConv(g("mlp_conv.base_kernel"), g("mlp_conv.kernel_projection.weight"), gs, rank, alpha)
+        self.attention_conv = GroupedConv(g("attention_conv.base_kernel"), g("attention_conv.kernel_projection.weight"), gs)
+        self.mlp_conv = GroupedConv(g("mlp_conv.base_kernel"), g("mlp_conv.kernel_projection.weight"), gs)
         self.nh = cfg["num_attention_heads"]
         self.nkv = cfg["num_key_value_heads"]
         self.hd = cfg["head_dim"]
@@ -159,7 +159,7 @@ class DFlash2(nn.Module):
         self.lm_head = nn.Parameter(lm_head_w.to(dtype), requires_grad=False)  # [V, C]
         self.eps = eps
 
-    # ---- context: target features -> per-layer K/V -------------------------------------
+    # context: target features -> per-layer K/V
     def context_kv(self, feats, pos):
         """feats [L, n_feat] -> list of (k [L, nkv, hd] roped, v [L, nkv, hd])."""
         g = self.hidden_norm(self.fc(feats))
@@ -172,7 +172,7 @@ class DFlash2(nn.Module):
             out.append((k, v))
         return out
 
-    # ---- block forward ------------------------------------------------------------------
+    # block forward
     def _layer(self, ly, x, kc, vc, cos, sin, bias, B):
         h = ly.input_layernorm(x)
         h, attn_dyn = ly.attention_conv.prepare(h, B)
@@ -226,7 +226,7 @@ class DFlash2(nn.Module):
         succ = self.sel_next[cand_ids]  # [N, K, R]
         return unary.float() + torch.einsum("nr,nkr->nk", ctx, succ)
 
-    # ---- export --------------------------------------------------------------------------
+    # export
     @torch.no_grad()
     def export_state_dict(self):
         sd = {}

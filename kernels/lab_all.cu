@@ -1,4 +1,4 @@
-// Lab driver for mmsq.cuh: correctness vs CPU reference and bandwidth for IQ4_XS / Q4_K / Q5_K / Q6_K.
+// Lab driver for mmsq-kernels.cuh: correctness vs CPU reference and bandwidth for IQ4_XS / Q4_K / Q5_K / Q6_K.
 // usage: lab_all [check|bench] [type...]
 #include <cstdio>
 #include <algorithm>
@@ -112,9 +112,30 @@ int main(int argc, char ** argv) {
     struct Shape { int M, K; };
     std::vector<Shape> shapes = {{17408, 5120}, {5120, 17408}, {10240, 5120}, {6144, 5120}, {5120, 6144}, {1024, 5120}};
     if (getenv("WEAK_SHAPES")) shapes = {{6144, 5120}, {1024, 5120}};
-    if (getenv("SHAPES")) { shapes.clear(); for (char * t = strtok(getenv("SHAPES"), ","); t; t = strtok(nullptr, ",")) { int m, k; sscanf(t, "%dx%d", &m, &k); shapes.push_back({m, k}); } }
+    if (getenv("SHAPES")) {
+        shapes.clear();
+        for (char * t = strtok(getenv("SHAPES"), ","); t; t = strtok(nullptr, ",")) {
+            int m, k;
+            if (sscanf(t, "%dx%d", &m, &k) != 2 || m <= 0 || k <= 0 || k % 256 != 0) {
+                std::fprintf(stderr, "bad SHAPES entry '%s' (want MxK, M,K > 0, K %% 256 == 0)\n", t);
+                return 2;
+            }
+            shapes.push_back({m, k});
+        }
+        if (shapes.empty()) { std::fprintf(stderr, "SHAPES is empty\n"); return 2; }
+    }
     std::vector<int> Ns = {1, 2, 4, 8, 12, 16};
-    if (getenv("NS")) { Ns.clear(); for (char * t = strtok(getenv("NS"), ","); t; t = strtok(nullptr, ",")) Ns.push_back(atoi(t)); }
+    if (getenv("NS")) {
+        Ns.clear();
+        for (char * t = strtok(getenv("NS"), ","); t; t = strtok(nullptr, ",")) {
+            const int n = atoi(t);
+            if (n < 1 || n > 16) { std::fprintf(stderr, "bad NS entry '%s' (want 1..16)\n", t); return 2; }
+            Ns.push_back(n);
+        }
+        if (Ns.empty()) { std::fprintf(stderr, "NS is empty\n"); return 2; }
+    }
+    const int rounds = getenv("ROUNDS") ? atoi(getenv("ROUNDS")) : 40;
+    if (rounds < 1) { std::fprintf(stderr, "ROUNDS must be >= 1\n"); return 2; }
     int sms; CK(cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0));
     std::mt19937 rng(1);
     int fails = 0;
@@ -149,6 +170,7 @@ int main(int argc, char ** argv) {
                 const int nt = (N + 7) / 8;
                 uint8_t * dXF; CK(cudaMalloc(&dXF, (size_t) nt * nsb * mmsq::FSB));
                 mmsq::quantize_x<<<dim3(nsb, nt), 32, 0, stream>>>(dx, dXF, K, N, K);
+                CK(cudaGetLastError());
                 CK(cudaStreamSynchronize(stream));
 
                 const int ctas_m = (M + 15) / 16;
@@ -216,7 +238,6 @@ int main(int argc, char ** argv) {
                     CK(cudaGraphInstantiate(&exec, graph, nullptr, nullptr, 0));
                     for (int r = 0; r < 5; ++r) CK(cudaGraphLaunch(exec, stream));
                     // min over rounds: other GPU work only adds time
-                    const int rounds = getenv("ROUNDS") ? atoi(getenv("ROUNDS")) : 40;
                     std::vector<double> t(rounds);
                     for (int r = 0; r < rounds; ++r) {
                         CK(cudaEventRecord(a, stream));

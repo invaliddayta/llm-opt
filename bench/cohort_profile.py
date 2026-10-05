@@ -1,4 +1,4 @@
-"""Explicit next-cohort configuration; previous presets and target stay unchanged."""
+"""Sampling variants and agent configurations for client benchmarks."""
 PROFILES = ("original", "balanced-v1", "focused-v1", "pragmatic-v1", "direct-code-v1", "reasoned-code-v1")
 
 

@@ -6,6 +6,7 @@ Usage: analyze_nsys.py runs/NAME.sqlite [--top 40]
 import argparse
 import sqlite3
 from collections import defaultdict
+from pathlib import Path
 
 
 def main():
@@ -13,17 +14,24 @@ def main():
     ap.add_argument("db")
     ap.add_argument("--top", type=int, default=40)
     a = ap.parse_args()
-    db = sqlite3.connect(a.db)
+    try:
+        db = sqlite3.connect(Path(a.db).resolve().as_uri() + "?mode=ro", uri=True)
+    except sqlite3.OperationalError as e:
+        raise SystemExit(f"cannot open {a.db}: {e}")
+    tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if not {"StringIds", "CUPTI_ACTIVITY_KIND_KERNEL"} <= tables:
+        raise SystemExit(f"no CUDA kernel trace in {a.db}; was the profile window inside decode?")
     names = dict(db.execute("SELECT id, value FROM StringIds"))
     kernels = [(s, e, names[n]) for s, e, n in db.execute(
         "SELECT start, end, shortName FROM CUPTI_ACTIVITY_KIND_KERNEL ORDER BY start")]
-    copies = list(db.execute("SELECT start, end, bytes, copyKind FROM CUPTI_ACTIVITY_KIND_MEMCPY ORDER BY start"))
-    tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    copies = list(db.execute("SELECT start, end, bytes, copyKind FROM CUPTI_ACTIVITY_KIND_MEMCPY ORDER BY start")) if "CUPTI_ACTIVITY_KIND_MEMCPY" in tables else []
     graphs = list(db.execute("SELECT start, end FROM CUPTI_ACTIVITY_KIND_GRAPH_TRACE")) if "CUPTI_ACTIVITY_KIND_GRAPH_TRACE" in tables else []
     if graphs:
         gt = sum(e - s for s, e in graphs)
         print(f"{len(graphs)} graph launches, {gt / 1e6:.1f} ms total, mean {gt / len(graphs) / 1e3:.1f} us")
     events = sorted([(s, e) for s, e, _ in kernels] + [(s, e) for s, e, _, _ in copies] + graphs)
+    if not events:
+        raise SystemExit(f"no kernel, memcpy or graph activity in {a.db}; was the profile window inside decode?")
     t0, t1 = events[0][0], max(e for _, e in events)
     span = t1 - t0
 

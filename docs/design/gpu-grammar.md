@@ -11,23 +11,23 @@ CPU. Over the USB4 eGPU link that is ~1.2 ms per ~36 ms step.
 
 ## Design
 
-- **Grammar to DFA.** At request setup, the CPU-parsed GBNF stack states are compiled into an
+- Grammar to DFA: at request setup, the CPU-parsed GBNF stack states are compiled into an
   exact finite automaton with character equivalence classes. Bounded regular subset only.
   Grammars with stack-growing recursion or token terminals are rejected at setup, and the
   request falls back to standard sampling. The real 11-tool OpenCode grammar: 6494 states,
   70 classes, 454,580 transitions, 1.82 MB table.
-- **Mask on the GPU.** A dedicated ggml op (`GGML_OP_GRAMMAR_MASK`) walks each vocabulary piece
+- Mask on the GPU: a dedicated ggml op (`GGML_OP_GRAMMAR_MASK`) walks each vocabulary piece
   through the DFA with the same UTF-8 semantics as the CPU grammar (EOG, empty pieces, inverse
   classes, partial UTF-8) and masks the logits.
-- **Speculative rows.** Persistent base state holds only committed tokens. The first verify row
+- Speculative rows: persistent base state holds only committed tokens. The first verify row
   applies pending committed tokens, then copies base to a working state; later rows advance the
   working state by the previous row's sampled token. Rows after a mismatch are discarded and
   never touch base.
-- **Lazy triggers and reasoning.** One literal word or exact token trigger (the server's
+- Lazy triggers and reasoning: one literal word or exact token trigger (the server's
   `<tool_call>`) and unlimited reasoning-tag suppression live in device state.
-- **RNG.** Device Philox4x32-10 with its counter in GPU state. Seeded outputs therefore differ
-  from the CPU MT19937 path; the distribution is the same.
-- **State handling.** Accepted-token packets carry 64-bit stamps so a replayed packet is
+- RNG: device Philox4x32-10 with its counter in GPU state. Seeded outputs differ from the CPU
+  MT19937 path; the distribution is the same.
+- State handling: accepted-token packets carry 64-bit stamps so a replayed packet is
   idempotent. Clones share immutable tables and own their mutable state; graph reserve/probe
   never commits pending tokens.
 

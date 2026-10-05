@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Benchmark real OpenCode runs through a transparent loopback capture proxy.
+"""Benchmark OpenCode runs through a loopback capture proxy.
 
-Only the isolated workspace config is written. Model requests/responses and CLI
-events remain local; credentials are never recorded. No request fields are
-changed by the proxy. An optional direct replay uses exactly the captured body.
+Save request bodies, responses, CLI events, and task metrics locally. Authorization headers are not recorded.
 """
 
 import argparse
@@ -181,8 +179,6 @@ def handler_factory(capture, target_port):
                             remainder = consume_sse(record, remainder, plain)
                     self.wfile.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
                     self.wfile.flush()
-                self.wfile.write(b"0\r\n\r\n")
-                self.wfile.flush()
                 if record is not None:
                     if sse:
                         consume_sse(record, remainder, b"", final=True)
@@ -194,6 +190,8 @@ def handler_factory(capture, target_port):
                         record["usage"] = obj.get("usage", {})
                         record["nonstream_complete"] = True
                     capture.save(record)
+                self.wfile.write(b"0\r\n\r\n")
+                self.wfile.flush()
             except Exception as exc:
                 if record is not None:
                     record["error"] = repr(exc)
@@ -257,7 +255,7 @@ def direct_replay(record, port, root, timeout):
     body = json.dumps(record["request"]).encode()
     replay = {"index": record["index"], "request": record["request"],
               "started_ns": time.perf_counter_ns(), "events": []}
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=min(timeout, 30))
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
     expired = threading.Event()
     active_socket = []
     deadline = time.monotonic() + timeout
@@ -429,7 +427,7 @@ def validate_delivery(name, summary, records, workspace, before):
 
 def verify_generated_tests(workspace, tests, log_path):
     start = time.perf_counter()
-    with tempfile.TemporaryDirectory(prefix="verify-pycache-", dir=os.environ.get("OPENCODE_BENCH_VERIFY_TMPDIR", "/tmp/opencode")) as cache, log_path.open("w") as log:
+    with tempfile.TemporaryDirectory(prefix="verify-pycache-", dir=os.environ.get("OPENCODE_BENCH_VERIFY_TMPDIR")) as cache, log_path.open("w") as log:
         cmd = [sys.executable, "-X", f"pycache_prefix={cache}", "-m", "unittest", "-v", *tests]
         proc = subprocess.Popen(cmd, cwd=workspace, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         timed_out = False
@@ -492,11 +490,11 @@ def main():
     ap.add_argument("--server", help="Optional explicit OpenCode server URL, otherwise use its shared service")
     ap.add_argument("--replay", action="store_true")
     ap.add_argument("--timeout", type=int, default=600)
-    ap.add_argument("--explicit-sampling", action="store_true", help="Send documented body overrides, not legacy model options")
-    ap.add_argument("--temperature", type=float, default=1.0, help="Isolated sampler experiment; existing default unchanged")
-    ap.add_argument("--thinking", choices=("on", "off"), default="on", help="Isolated reasoning-mode experiment; existing default unchanged")
-    ap.add_argument("--task-presets", action="store_true", help="Isolated per-task variant experiment; not unchanged-mode optimization evidence")
-    ap.add_argument("--cohort-profile", choices=cohort_profile.PROFILES, default="original", help="Explicit new sampler/agent cohort; original TASKS and previous presets stay unchanged")
+    ap.add_argument("--explicit-sampling", action="store_true", help="Send sampling options in the request body")
+    ap.add_argument("--temperature", type=float, default=1.0, help="Temperature override; requires --explicit-sampling")
+    ap.add_argument("--thinking", choices=("on", "off"), default="on", help="Thinking-mode override; requires --explicit-sampling")
+    ap.add_argument("--task-presets", action="store_true", help="Per-task sampling presets override; requires --explicit-sampling")
+    ap.add_argument("--cohort-profile", choices=cohort_profile.PROFILES, default="original", help="Sampler/agent cohort profile override; requires --explicit-sampling and --task-presets")
     a = ap.parse_args()
     if not math.isfinite(a.temperature) or not 0 <= a.temperature <= 2 or (a.temperature != 1 and not a.explicit_sampling):
         ap.error("temperature requires explicit sampling and a finite value in 0..2")

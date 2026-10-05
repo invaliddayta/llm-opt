@@ -123,6 +123,8 @@ def main():
     ap.add_argument("--request-timeout", type=float, default=300)
     ap.add_argument("extra", nargs="*", help="extra server args after --")
     a = ap.parse_args()
+    if a.spec == "dflash" and not a.draft:
+        ap.error("--spec dflash requires --draft")
 
     prompts = all_prompts(include_long=not a.no_long)
     if a.only:

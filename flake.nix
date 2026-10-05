@@ -46,6 +46,8 @@
           pkgs.ccache
           pkgs.pkg-config
           pkgs.openssl
+          pkgs.curl
+          (pkgs.python3.withPackages (ps: [ ps.requests ps.pytest ]))
         ];
         CUDA_HOME = "${cudaJoined}";
         CUDAToolkit_ROOT = "${cudaJoined}";

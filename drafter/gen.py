@@ -33,7 +33,7 @@ def start_server(np_, ctx_per_slot, log):
         "--no-webui", "--kv-unified", "--cache-reuse", "0", "-t", "12",
     ]
     env = dict(os.environ)
-    env["LD_LIBRARY_PATH"] = str(ROOT / "driver-libs")
+    env["LD_LIBRARY_PATH"] = str(ROOT / "driver-libs") + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
     p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env, start_new_session=True)
     for _ in range(600):
         if p.poll() is not None:
@@ -44,7 +44,13 @@ def start_server(np_, ctx_per_slot, log):
         except requests.RequestException:
             pass
         time.sleep(1)
-    raise TimeoutError
+    os.killpg(p.pid, signal.SIGTERM)
+    try:
+        p.wait(10)
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL)
+        p.wait()
+    raise TimeoutError("server did not become ready")
 
 
 def pick_effort(rng):

@@ -38,7 +38,7 @@ from the same base and run back to back with the same model files, flags and sam
 | story (~1500 words) | T=0.4, top-p 0.95, top-k 20, seed 1234 | 53.8 ms, 72.8 tok/s | **33.3 ms, 129.8 tok/s** | -38% |
 | weighted | | 90.5 tok/s | **143.7 tok/s** | |
 
-**ms per verify step is the like-for-like number: about 1.6x faster.** tok/s also depends on
+Compare ms per verify step: about 1.6x faster. tok/s also depends on
 how many drafted tokens are accepted per step (3.9-5.8 here), which depends on the text.
 Upstream samples with a different RNG, so its outputs and lengths differ from the fork's, and
 its tok/s is only indicative. Every fork change since 2026-10-04 keeps the output
@@ -85,10 +85,10 @@ mmproj  5681b690bcb8eb10cd28d62d078cb4e01521a3ea4880a3fc7d54de72de2dd142  rev 99
 
 ## What changed
 
-| | Change | Why it matters |
+| | Change | Effect |
 | --- | --- | --- |
-| **MMSQ** | Small-batch (N <= 16) quantized GEMM on int8 tensor cores for IQ4_XS, Q4_K, Q5_K, Q6_K, with split-K and activation reuse | Verify steps are weight-bandwidth bound; this is most of the gain |
-| **Fused norm** | Residual add + RMS norm + weight + activation quantization in one kernel | 127 kernels per step fewer, bit-exact |
+| **MMSQ** | Small-batch (N <= 16) quantized GEMM on int8 tensor cores for IQ4_XS, Q4_K, Q5_K, Q6_K, with split-K and activation reuse | Verify steps are bound by weight bandwidth; most of the gain |
+| **Fused norm** | Residual add + RMS norm + weight + activation quantization in one kernel | 127 fewer kernels per step, bit-exact |
 | **Q4 attention** | q4_0 KV decoded straight into the MMA flash-attention tiles | 95.8 -> 109.7 tok/s at 91K context ([notes](docs/design/q4-mma-attention.md)) |
 | **GPU grammar** | Tool-call grammar compiled to a DFA, masked and sampled on the GPU | No 7.9 MB logits copy per step on tool requests ([notes](docs/design/gpu-grammar.md)) |
 | **DFlash features** | Draft conditioning features stay on the GPU | No host round trip per step ([notes](docs/design/gpu-feature-bridge.md)) |
@@ -96,13 +96,13 @@ mmproj  5681b690bcb8eb10cd28d62d078cb4e01521a3ea4880a3fc7d54de72de2dd142  rev 99
 | **Sleep cache** | KV/state snapshot to disk on idle unload, restored on wake | Long contexts survive idle sleep |
 | **Race fix** | Shared-memory race in `flash_attn_ext_vec` (upstream bug) | racecheck 2.2M hazards -> 0 |
 
-Things that sounded good and measured flat are written down too: splitting CUDA graph launches,
-skipping GDN state snapshots, GPU token embedding, deeper MMSQ pipelines.
+Tried and dropped (no gain): split CUDA graph launches, skipping GDN state snapshots, GPU token
+embedding, deeper MMSQ pipelines. Numbers in [experiments.md](docs/design/experiments.md#dropped).
 
 ## Try it
 
-You need an sm_86 GPU with 24 GB, CUDA 12.x and the GGUFs (target, DFlash2 draft, optionally
-the mmproj). Nix users get the toolchain from `nix develop`.
+You need an sm_86 GPU with 24 GB, CUDA 12.x, the target and DFlash2 draft GGUFs (the mmproj is
+optional) and a chat template. Nix users get the toolchain from `nix develop`.
 
 ```sh
 git clone https://github.com/invaliddayta/llm-opt && cd llm-opt
@@ -117,7 +117,7 @@ Start a server with the production flags and replay the benchmark tasks:
 
 ```sh
 GGML_CUDA_FATTN_Q4_MMA=1 LLAMA_GPU_SAMPLING=1 LLAMA_DFLASH_GPU_FEATURES=1 \
-  MODEL=... DRAFT=... MMPROJ=... bench/serve_test.sh      # port 8181
+  MODEL=... DRAFT=... TEMPLATE=... bench/serve_test.sh    # port 8181; MMPROJ=... optional
 python3 bench/r20_replay.py --url http://127.0.0.1:8181   # ms/step, tok/s, output hashes
 ```
 
@@ -144,11 +144,11 @@ Ignored and local: `llama.cpp/` (the fork checkout), `models/`, `data/`, `runs/`
 
 ## How changes get in
 
-1. **Lab first.** A kernel change has to beat production in `kernels/` and match it bit for bit
+1. The kernel lab in `kernels/`: the change has to beat production and match it bit for bit
    (`EXACT_BASELINE=1`) on the real shapes.
-2. **Backend tests.** `test-backend-ops` for each touched op, compute-sanitizer for races.
-3. **Replay A/B.** Old and new builds back to back. Output hashes must match and ms/step must drop.
-4. **Ship.** One patch against upstream, rebuilt and checked against the live server.
+2. `test-backend-ops` for each touched op, compute-sanitizer for races.
+3. Replay A/B of the old and new build, back to back. Output hashes must match and ms/step must drop.
+4. Ship as one patch against upstream, rebuild, check against the live server.
 
 ## License
 

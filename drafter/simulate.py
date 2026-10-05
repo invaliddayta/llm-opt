@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
-"""Exact greedy speculative-decoding simulation of a DFlash2 drafter on greedy target sequences.
-
-For a target-greedy sequence, spec decode under greedy verification accepts the
-longest prefix of the draft that matches the sequence. Simulating the anchor walk
-(anchor -> anchor + accepted + 1) reproduces llama.cpp's tokens/step, which
-validates the PyTorch drafter against the C++ implementation.
-"""
+"""Simulate greedy verification against recorded target continuations."""
 
 import argparse
 import json
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 
 from data import Shard
 from model import DFlash2
@@ -27,6 +20,8 @@ def simulate(model, embd, ex, device, n_max=7):
     toks = ex["tokens"]
     n_prompt = ex["meta"]["n_prompt"]
     L = len(toks)
+    if L - n_prompt < 2:
+        return 0, 0
     B = n_max + 1
     anchors = torch.arange(n_prompt, L - 1)
     paths = []
@@ -64,8 +59,13 @@ def main():
     for i in range(len(sh)):
         ex = sh.get(i)
         g, s = simulate(model, embd, ex, device, a.n_max)
+        if not s:
+            print(json.dumps({"id": ex["meta"]["id"], "skipped": "fewer than 2 response tokens"}), flush=True)
+            continue
         G += g; S += s
         print(json.dumps({"id": ex["meta"]["id"], "tok_per_step": g / s, "gen": g, "steps": s}), flush=True)
+    if not S:
+        raise SystemExit("no sequence with at least 2 response tokens")
     print("TOTAL tok/step", G / S)
 
 

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Parity test: PyTorch drafter drafts vs llama.cpp's (llama-dflash-parity) at the same anchors.
 
-usage: parity.py --shard data/shards/s0 --seq 3 --draft-hf models/dflash2-hf --draft-gguf models/.../BF16.gguf --n-max 7
+usage: parity.py --shard data/shards/s0 --seqs 3,11,42 --draft-hf models/dflash2-hf --draft-gguf models/.../BF16.gguf --n-max 7
 """
 
 import argparse
 import os
 import struct
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +35,7 @@ def main():
     B = a.n_max + 1
     tot_pos = tot_eq = tot_full = tot_blocks = 0
     jobs = []
+    tmp = tempfile.TemporaryDirectory(prefix="parity-")
     for si in [int(x) for x in a.seqs.split(",")]:
         ex = sh.get(si)
         toks = ex["tokens"].numpy()
@@ -40,7 +43,7 @@ def main():
         L = len(toks)
         cand = [npr, npr + 1, npr + 7, npr + 30, npr + 100, npr + 257, 2040, 2047, 2048, 2049, 2100, 2500, L - 20]
         anchors = sorted({c for c in cand if npr <= c < L - 1})
-        fx = f"/tmp/opencode/parity_{si}.bin"
+        fx = os.path.join(tmp.name, f"parity_{si}.bin")
         with open(fx, "wb") as f:
             f.write(struct.pack("<I", L)); f.write(toks.astype(np.uint32).tobytes())
         env = dict(os.environ, LD_LIBRARY_PATH=str(ROOT / "driver-libs"))
@@ -48,7 +51,11 @@ def main():
                "-md", a.draft_gguf, "--spec-type", "draft-dflash", "--spec-draft-n-max", str(a.n_max), "--spec-draft-p-min", "0",
                "-ngl", "999", "--spec-draft-ngl", "999", "-fa", "on", "-c", "8192", "-b", "4096", "-ub", "512",
                "--in", fx, "--anchors", ",".join(map(str, anchors))]
-        out = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, env=env, check=True)
+        except subprocess.CalledProcessError as e:
+            print(e.stderr[-3000:], file=sys.stderr)
+            raise SystemExit(f"parity tool failed with exit {e.returncode}")
         cpp = {}
         for line in out.stdout.strip().splitlines():
             parts = [int(x) for x in line.split()]
@@ -57,6 +64,7 @@ def main():
             print(out.stderr[-3000:])
             raise SystemExit("parity tool produced no output")
         jobs.append((si, ex, toks, anchors, cpp))
+    tmp.cleanup()
 
     lm_head = torch.load(ROOT / "models/cache/output.weight.pt")
     embd = torch.load(ROOT / "models/cache/token_embd.weight.pt")
@@ -77,6 +85,8 @@ def main():
             actual = toks[an + 1: an + B].tolist()
             print(f"seq {si} anchor {an:5d} prefix_agree {k}/{len(py)}  py={py}  cpp={cc}  actual={actual}")
     print(f"PARITY: identical blocks {tot_full}/{tot_blocks}, positions {tot_eq}/{tot_pos}")
+    if not tot_blocks or tot_full != tot_blocks:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

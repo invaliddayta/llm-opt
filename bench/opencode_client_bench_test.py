@@ -8,7 +8,6 @@ import io
 import os
 from pathlib import Path
 import py_compile
-import socket
 import subprocess
 import tempfile
 import threading
@@ -32,13 +31,13 @@ class Tests(unittest.TestCase):
         return bench.validate_delivery(name, {"tool_calls": tools}, records, root, before or {})
 
     def test_reasoning_only_native_success_is_not_delivery(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             result = self.delivery(Path(directory), answer="", tools=0)
             self.assertFalse(result["valid"])
             self.assertIn("Required tool workflow did not occur", result["failures"])
 
     def test_inherited_artifacts_do_not_count_as_new_work(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "budget.py").write_text("def main():\n    return 1\n")
             (root / "test_budget.py").write_text("def test_main():\n    assert True\n")
@@ -51,7 +50,7 @@ class Tests(unittest.TestCase):
             self.assertIn("Stub function: budget.py:main", result["failures"])
 
     def test_answer_only_delivery_rejects_tools_or_empty_output(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.assertTrue(self.delivery(root, "story", tools=0)["valid"])
             self.assertFalse(self.delivery(root, "story", tools=1)["valid"])
@@ -59,7 +58,7 @@ class Tests(unittest.TestCase):
             self.assertFalse(self.delivery(root, "python_long", tools=0, answer="No code.")["valid"])
 
     def test_artifact_symlinks_cannot_escape_workspace(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             inside = root / "inside"
             inside.mkdir()
@@ -69,7 +68,7 @@ class Tests(unittest.TestCase):
                 bench.python_snapshot(inside)
 
     def test_independent_tests_reject_zero_or_failed_tests(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             module = root / "test_delivery.py"
             for body, valid, count in (("import unittest\n", False, 0),
@@ -83,7 +82,7 @@ class Tests(unittest.TestCase):
                 self.assertEqual(result["test_count"], count)
 
     def test_independent_tests_do_not_read_stale_workspace_bytecode(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             program = root / "budget.py"
             program.write_text("def value():\n    return 1\n")
@@ -111,7 +110,7 @@ class Tests(unittest.TestCase):
                 self.main_failure(True, task_presets=True, failure_stage=stage)
 
     def main_failure(self, thinking_mismatch, task_presets=False, failure_stage=None):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             argv = ["bench", "--workspace", str(root / "workspace"), "--output", str(root / "output"), "--tasks", "story", "explanation"]
             capture = mock.Mock(records=[{"tag": "story"}, {"tag": "explanation"}])
@@ -179,7 +178,7 @@ class Tests(unittest.TestCase):
                     self.assertFalse(model["body"]["chat_template_kwargs"]["enable_thinking"])
 
     def test_sampling_experiment_validation(self):
-        base = ["bench", "--workspace", "/tmp/opencode/unused-validation-workspace", "--output", "/tmp/opencode/unused-validation-output"]
+        base = ["bench", "--workspace", "unused-validation-workspace", "--output", "unused-validation-output"]
         for extra in (["--thinking", "off"], ["--temperature", "0"], ["--explicit-sampling", "--temperature", "nan"],
                       ["--explicit-sampling", "--temperature", "inf"], ["--explicit-sampling", "--temperature", "2.5"],
                        ["--explicit-sampling", "--temperature", "-1"], ["--task-presets"],
@@ -210,7 +209,7 @@ class Tests(unittest.TestCase):
             self.assertFalse(bench.sampling_matches([{"request": expected}, {"request": missing_or_wrong}], expected))
 
     def test_failed_record_analysis(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "results.json"
             path.write_text(json.dumps({"args": {"tasks": ["python_long"]}, "results": {
                 "python_long": {"failed": True, "reason": "task deadline exceeded"}}}))
@@ -225,7 +224,7 @@ class Tests(unittest.TestCase):
     def test_cli_tool_accounting_fallback(self):
         events = [{"type": "tool_use", "part": {"id": "a", "state": {"status": "completed", "time": {"start": 0, "end": 100}}}},
                   {"type": "tool_use", "part": {"id": "b", "state": {"status": "completed", "time": {"start": 50, "end": 200}}}}]
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
             path.write_text("\n".join(json.dumps(event) for event in events))
             result = bench.cli_tool_metrics(path)
@@ -284,7 +283,7 @@ class Tests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+            with tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 capture = bench.Capture(root)
                 proxy = ThreadingHTTPServer(("127.0.0.1", 0), bench.handler_factory(capture, server.server_port))
@@ -327,7 +326,7 @@ class Tests(unittest.TestCase):
         server.daemon_threads = True
         threading.Thread(target=server.serve_forever, daemon=True).start()
         try:
-            with tempfile.TemporaryDirectory(dir="/tmp/opencode") as directory:
+            with tempfile.TemporaryDirectory() as directory:
                 start = time.monotonic()
                 with self.assertRaises((TimeoutError, OSError)):
                     bench.direct_replay({"index": 0, "request": {"stream": True}, "path": "/v1/chat/completions"},
