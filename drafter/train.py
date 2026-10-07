@@ -175,6 +175,7 @@ def main():
     ap.add_argument("--eval-max", type=int, default=80)
     ap.add_argument("--eval-only", action="store_true")
     ap.add_argument("--max-steps", type=int, default=0)
+    ap.add_argument("--patience", type=int, default=0, help="stop after this many evals without improvement (0 = off)")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
 
@@ -223,7 +224,7 @@ def main():
         rng.shuffle(o)
         order += o
     agg = {"unary": 0.0, "sel": 0.0, "w": 0.0, "wsel": 0.0}
-    best = ev["accept_len"]
+    best, stale = ev["accept_len"], 0
     step, t0 = 0, time.time()
     for it, (si, i) in enumerate(order[: total_steps * a.accum]):
         ex = shards[si].get(i)
@@ -255,10 +256,15 @@ def main():
                 print(f"eval@{step}", json.dumps(ev), flush=True)
                 log.write(json.dumps({"step": step, "eval": ev}) + "\n"); log.flush()
                 if ev["accept_len"] > best:
-                    best = ev["accept_len"]
+                    best, stale = ev["accept_len"], 0
                     save_file(model.export_state_dict(), str(out / "model.safetensors"))
                     (out / "config.json").write_text((Path(a.init) / "config.json").read_text())
                     print("saved best", best, flush=True)
+                else:
+                    stale += 1
+                    if a.patience and stale >= a.patience:
+                        print(f"early stop: {stale} evals without improvement, best {best}", flush=True)
+                        break
 
 
 if __name__ == "__main__":

@@ -71,6 +71,15 @@ Both together: -0.3 ms/step end to end (explanation 33.0 -> 32.7, python100 33.7
   also alter the summation order.
 - **Separate activation quantization kernels** (warp per column pair): exact but no faster.
 - **Quantized-KV vector attention for decode:** see above, 2.4-3.8x slower.
+- **Fine-tuning the DFlash2 drafter on the deployed target (2026-10-07).** LoRA rank 128 on
+  2 shards (1363 sequences, 2.1M tokens), 8% of prompts held out (45K draft positions), held-out
+  eval every 25 steps, best-only save, early stop after 3 evals without gain. Stock DFlash2
+  scores 4.309 expected accepted tokens per step. Default rates (LoRA 2e-4, selector/norms
+  5e-5): 4.285 at step 25 and flat, worse during warmup, so a bad update direction, not
+  overfitting. LoRA 2e-5, rest frozen: best 4.315 (+0.1%, within noise), then declining. Too
+  small to measure end to end, so no A/B. 12.1 GB VRAM, ~3 s per step. The stock drafter
+  already fits this target well; a gain would need far more data, not tuning against the same
+  held-out set.
 
 ## Open ideas, by estimated value
 
