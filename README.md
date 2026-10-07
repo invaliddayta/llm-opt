@@ -75,8 +75,8 @@ mmproj  5681b690bcb8eb10cd28d62d078cb4e01521a3ea4880a3fc7d54de72de2dd142  rev 99
   256). Vocabulary 248,320. The GGUF also embeds an MTP head, which is not used here.
 - **Draft:** z-lab's stock **DFlash2** block drafter (5 layers, conditioned on five target
   layers' hidden states), `--spec-type draft-dflash`, up to 7 drafted tokens per step, so 8
-  tokens are verified per step. **No custom-trained drafter is used:** fine-tuning it on the target
-  (`drafter/`) gave +0.1% at best.
+  tokens are verified per step. **No custom-trained drafter is used:** fine-tuning it on the target gave
+  +0.1% at best and was dropped ([experiments](docs/design/experiments.md#dropped)).
 - **Context and KV compression:** 98,304 tokens. The target's KV cache is quantized to
   **q4_0 for both K and V** (4.5 bits per value instead of 16 for f16, 3.6x smaller): 1.7 GiB
   instead of 6 GiB at full context, and only the 16 attention layers need it. The draft's KV
@@ -136,10 +136,10 @@ to upstream code paths. Switches and the full test workflow: [docs/DEPLOYMENT.md
 | `bench/profile_decode.sh`, `bench/analyze_nsys.py` | nsys trace of a decode and its kernel/idle breakdown |
 | `bench/compat_check.py` | Request compatibility: penalties, logprobs, JSON schema, tools, image |
 | `bench/bench.py`, `bench/agent_bench.py`, `bench/opencode_client_bench.py` | Plain chat, agent turns with a tool catalog, real OpenCode tasks |
-| `drafter/`, `eval/` | DFlash2 fine-tuning pipeline (tried, no gain, not used for any result), KL-divergence evaluation |
+| `eval/` | KL-divergence check of the small-batch kernels |
 | `docs/` | Status, test/ship workflow, design notes |
 
-Ignored and local: `llama.cpp/` (the fork checkout), `models/`, `data/`, `runs/`, `.venv/`, and
+Ignored and local: `llama.cpp/` (the fork checkout), `models/`, `runs/`, `.venv/`, and
 `driver-libs/` (host NVIDIA user-space libraries matching the kernel driver; may be a symlink).
 
 ## How changes get in

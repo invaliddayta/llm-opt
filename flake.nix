@@ -1,5 +1,5 @@
 {
-  description = "Dev shell for Qwen3.8-27B drafter + CUDA kernel optimization work (RTX 3090, sm_86)";
+  description = "Dev shell for Qwen3.8-27B CUDA kernel optimization work (RTX 3090, sm_86)";
 
   # Same nixpkgs revision as the deployment flake, so the CUDA closure is shared.
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/624af665418d3c65d544145b4d34ad696439570e";

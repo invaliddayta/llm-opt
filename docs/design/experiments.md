@@ -79,7 +79,7 @@ Both together: -0.3 ms/step end to end (explanation 33.0 -> 32.7, python100 33.7
   overfitting. LoRA 2e-5, rest frozen: best 4.315 (+0.1%, within noise), then declining. Too
   small to measure end to end, so no A/B. 12.1 GB VRAM, ~3 s per step. The stock drafter
   already fits this target well; a gain would need far more data, not tuning against the same
-  held-out set.
+  held-out set. The training pipeline, data and the fork's feature-dump tools were removed.
 
 ## Open ideas, by estimated value
 

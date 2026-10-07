@@ -56,7 +56,7 @@ llama.cpp `8df332de1` with one patch generated from the fork:
 
 ```sh
 cd llama.cpp
-git diff upstream-base opt/main -- . ':!examples' ':!README.md' ':!media/llama-cpp-opt.svg' > ~/hermes/patches/llama-opt.patch
+git diff upstream-base opt/main -- . ':!README.md' ':!media/llama-cpp-opt.svg' > ~/hermes/patches/llama-opt.patch
 cd ~/hermes
 git add patches/llama-opt.patch            # flakes only see tracked files
 nix build .#llama-cuda --no-link           # compile check (~10 min)
@@ -64,7 +64,7 @@ nix run .#serve-up                         # rebuilds the image, recreates the c
 python3 ~/github/llm-opt/bench/compat_check.py   # against production, port 8080
 ```
 
-`examples/` (the `dflash-dump` tools for `drafter/`) and the fork README and banner stay out of the patch. The opt-ins are
+The fork README and banner stay out of the patch. The opt-ins are
 `model.nix` settings (`cudaFattnQ4Mma`, `gpuSampling`, `dflashGpuFeatures`). Any change to the
 build or settings changes the serve revision, which recreates the container and invalidates
 the sleep cache.

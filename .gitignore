@@ -1,6 +1,5 @@
 llama.cpp/
 models/
-data/
 runs/
 venv/
 .venv/
@@ -8,6 +7,5 @@ venv/
 *.safetensors
 llama-deploy/
 driver-libs/
-SpecForge/
 __pycache__/
 *.pyc
